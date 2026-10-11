@@ -1,0 +1,2635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>信访人画像分析系统</title>
+<script>
+// 本地优先 + CDN回退加载器，确保离线可用
+function _ld(u,o,n){
+  var s=document.createElement('script');s.src=u;
+  s.onload=function(){o&&o(true);};
+  s.onerror=function(){
+    if(n){var s2=document.createElement('script');s2.src=n;
+      s2.onload=function(){o&&o(true);};s2.onerror=function(){o&&o(false);};
+      document.head.appendChild(s2);}
+    else{o&&o(false);}
+  };
+  document.head.appendChild(s);
+}
+</script>
+<script>
+_ld('libs/echarts.min.js',function(ok){
+  if(!ok)_ld('https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',function(ok2){
+    if(!ok2)_ld('https://unpkg.com/echarts@5.4.3/dist/echarts.min.js',null,null);
+  });
+});
+_ld('libs/xlsx.full.min.js',function(ok){
+  if(!ok)_ld('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',function(ok2){
+    if(!ok2)_ld('https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',null,null);
+  });
+});
+_ld('china_geo_data.js',function(ok){
+  if(ok && typeof CHINA_GEOJSON_REAL!=='undefined' && CHINA_GEOJSON_REAL.features){
+    // 处理省份名称
+    CHINA_GEOJSON_REAL.features.forEach(function(f){
+      var fn=f.properties.name;
+      if(PROVINCE_NAME_MAP[fn]) f.properties.name=PROVINCE_NAME_MAP[fn];
+    });
+    // 更新CHINA_GEOJSON
+    CHINA_GEOJSON.features = CHINA_GEOJSON_REAL.features;
+  }
+},null);
+</script>
+<style>
+#loadErr{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#030814;z-index:9999;
+  color:#f0f4ff;text-align:center;padding-top:200px;font-size:14px;line-height:2}
+#loadErr a{color:#5a9bf0}
+</style>
+<style>
+:root{
+  --bg-0:#030814;--bg-1:#070e1d;--bg-2:#0b1528;--bg-3:#0f1e3a;
+  --bg-card:rgba(12,24,48,.65);--bg-card-hover:rgba(16,32,64,.8);
+  --border:rgba(56,116,200,.18);--border-bright:rgba(80,150,255,.35);
+  --text-1:#f0f4ff;--text-2:#8ea8d0;--text-3:#50668a;
+  --blue:#3874c8;--blue-l:#5a9bf0;--blue-d:#1e5fa8;
+  --red:#ff4d4f;--orange:#ff8c42;--yellow:#ffcc44;--green:#36c667;
+  --r-sm:6px;--r-md:10px;--r-lg:14px;
+  --glow-blue:0 0 20px rgba(56,116,200,.15);
+  --shadow:0 8px 32px rgba(0,0,0,.4);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg-0);color:var(--text-1);font-family:'Microsoft YaHei','PingFang SC','SF Pro SC',sans-serif;font-size:13px;overflow:hidden;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(30,95,168,.12),transparent 50%),radial-gradient(ellipse at 80% 100%,rgba(56,116,200,.08),transparent 50%)}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:rgba(56,116,200,.3);border-radius:2px}::-webkit-scrollbar-track{background:transparent}
+
+/* Header */
+.header{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+  background:linear-gradient(180deg,rgba(7,14,29,.95),rgba(3,8,20,.85));border-bottom:1px solid var(--border);flex-shrink:0;position:relative;z-index:10}
+.header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(56,116,200,.4),transparent)}
+.header h1{font-size:20px;font-weight:700;color:#fff;letter-spacing:4px;text-shadow:0 0 20px rgba(56,116,200,.3)}
+.header h1::before{content:'';display:inline-block;width:6px;height:20px;background:linear-gradient(180deg,var(--blue-l),var(--blue-d));border-radius:3px;margin-right:14px;vertical-align:middle;box-shadow:0 0 8px rgba(90,155,240,.5)}
+.header .right{display:flex;gap:20px;align-items:center;font-size:12px;color:var(--text-2)}
+.header .dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px;box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.header .stat-pill{background:rgba(56,116,200,.12);border:1px solid var(--border);border-radius:20px;padding:4px 14px;color:var(--blue-l)}
+.header button{background:rgba(56,116,200,.1);border:1px solid var(--border-bright);color:var(--blue-l);padding:5px 16px;border-radius:20px;cursor:pointer;font-size:12px;transition:all .25s}
+.header button:hover{background:rgba(56,116,200,.2);color:#fff;box-shadow:0 0 12px rgba(56,116,200,.2)}
+
+/* Tabs */
+.tabs{height:42px;display:flex;align-items:center;gap:2px;padding:0 20px;background:rgba(7,14,29,.6);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{padding:7px 22px;font-size:13px;color:var(--text-2);cursor:pointer;border-radius:var(--r-sm) var(--r-sm) 0 0;transition:all .25s;position:relative;letter-spacing:1px}
+.tab.active{color:#fff;background:rgba(56,116,200,.1)}
+.tab.active::after{content:'';position:absolute;bottom:-1px;left:20%;right:20%;height:2px;background:linear-gradient(90deg,transparent,var(--blue-l),transparent);border-radius:1px}
+.tab:hover:not(.active){color:var(--blue-l)}
+
+/* Upload */
+.upload-zone{margin:40px auto;width:560px;max-width:90%;padding:48px 40px;border:1.5px dashed rgba(56,116,200,.3);border-radius:16px;text-align:center;cursor:pointer;transition:all .3s;
+  background:rgba(12,24,48,.4);backdrop-filter:blur(10px)}
+.upload-zone:hover{border-color:var(--blue-l);background:rgba(16,32,64,.5);box-shadow:var(--glow-blue)}
+.upload-zone.dragover{border-color:var(--blue-l);background:rgba(16,32,64,.6);transform:scale(1.01)}
+.upload-zone .icon{width:64px;height:64px;margin:0 auto 20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;
+  background:linear-gradient(135deg,rgba(56,116,200,.15),rgba(30,95,168,.05));border:1px solid rgba(56,116,200,.2);color:var(--blue-l)}
+.upload-zone .title{font-size:18px;color:#fff;margin-bottom:8px;font-weight:600}
+.upload-zone .desc{font-size:13px;color:var(--text-2);line-height:1.8}
+.upload-zone .files{margin-top:24px;text-align:left;max-width:460px;margin:24px auto 0}
+.upload-zone .file-item{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(16,32,64,.5);border:1px solid var(--border);border-radius:var(--r-sm);margin:6px 0;font-size:13px;color:var(--text-1)}
+.upload-zone .file-item .del{cursor:pointer;color:var(--red);font-size:16px;opacity:.7;transition:opacity .2s}
+.upload-zone .file-item .del:hover{opacity:1}
+
+/* Upload tabs & buttons */
+.upload-tabs{display:flex;justify-content:center;gap:8px;margin:20px 0 16px}
+.utab{background:rgba(16,32,64,.5);border:1px solid var(--border);color:var(--text-2);padding:6px 18px;border-radius:16px;font-size:12px;cursor:pointer;transition:all .2s;font-family:inherit}
+.utab:hover{border-color:var(--blue-l);color:var(--text-1)}
+.utab.active{background:linear-gradient(135deg,var(--blue),var(--blue-d));border-color:var(--blue-l);color:#fff;font-weight:600}
+.upbtn{background:linear-gradient(135deg,var(--blue),var(--blue-d));border:1px solid var(--blue-l);color:#fff;padding:8px 24px;border-radius:var(--r-sm);cursor:pointer;font-size:13px;font-weight:600;transition:all .2s;font-family:inherit;letter-spacing:.5px}
+.upbtn:hover{box-shadow:var(--glow-blue);transform:translateY(-1px)}
+.upbtn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+/* DB config */
+.db-config{margin-top:16px;text-align:left;max-width:460px;margin:16px auto 0}
+.db-row{display:flex;align-items:center;gap:12px;margin:10px 0}
+.db-row label{width:80px;font-size:12px;color:var(--text-2);text-align:right;flex-shrink:0}
+.db-row select{flex:1;padding:6px 10px;border:1px solid #1e3a5f;background:rgba(10,20,40,.6);color:#e0e8ff;border-radius:4px;font-size:12px;outline:none;font-family:inherit}
+.db-row select:focus{border-color:var(--blue-l)}
+
+/* Module layout */
+.module{display:none;height:calc(100vh - 100px);padding:10px;overflow:hidden;gap:10px}
+.module.active{display:grid}
+.col{display:flex;flex-direction:column;gap:10px;overflow:hidden;min-height:0;min-width:0}
+
+/* Card */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);padding:14px 16px;display:flex;flex-direction:column;overflow:hidden;transition:all .25s;backdrop-filter:blur(8px)}
+.card:hover{border-color:var(--border-bright)}
+.card-title{font-size:14px;font-weight:600;color:#fff;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-shrink:0;letter-spacing:1px}
+.card-title::before{content:'';width:3px;height:14px;background:linear-gradient(180deg,var(--blue-l),var(--blue-d));border-radius:2px}
+.card-title .count{margin-left:auto;font-size:12px;color:var(--text-3);font-weight:400}
+.card-body{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+
+/* Stats */
+.stats-grid{display:grid;gap:8px;flex-shrink:0}
+.stat{background:rgba(16,32,64,.5);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden;transition:all .2s}
+.stat:hover{border-color:var(--border-bright);background:rgba(20,40,80,.5)}
+.stat::before{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:var(--blue-l)}
+.stat.r::before{background:var(--red)}.stat.o::before{background:var(--orange)}.stat.y::before{background:var(--yellow)}.stat.g::before{background:var(--green)}
+.stat .lbl{font-size:11px;color:var(--text-2);letter-spacing:.5px}
+.stat .val{font-size:24px;font-weight:700;color:#fff;line-height:1.2}
+.stat.r .val{color:var(--red)}.stat.o .val{color:var(--orange)}.stat.y .val{color:var(--yellow)}.stat.g .val{color:var(--green)}
+
+/* Person cards */
+.person-list{display:flex;flex-direction:column;gap:6px}
+.person{background:rgba(16,32,64,.4);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:12px}
+.person:hover{border-color:var(--border-bright);background:rgba(20,40,80,.5);transform:translateX(2px)}
+.person .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px currentColor}
+.person .info{flex:1;min-width:0}
+.person .name{font-size:14px;font-weight:600;color:#fff}
+.person .meta{font-size:11px;color:var(--text-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person .tags-mini{display:flex;gap:4px;margin-top:4px;flex-wrap:nowrap;overflow:hidden}
+.person .tag-mini{font-size:10px;padding:1px 6px;border-radius:8px;white-space:nowrap;flex-shrink:0}
+.person .score-box{text-align:right;flex-shrink:0}
+.person .score-num{font-size:18px;font-weight:700;line-height:1}
+.person .score-lvl{font-size:10px;color:var(--text-2);margin-top:3px}
+
+/* Search */
+.search-bar{display:flex;gap:8px;flex-shrink:0;margin-bottom:10px}
+.search-bar input,.search-bar select{background:rgba(7,14,29,.6);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;color:#fff;font-size:12px;outline:none;transition:all .2s}
+.search-bar input{flex:1}.search-bar input:focus,.search-bar select:focus{border-color:var(--blue-l);box-shadow:0 0 8px rgba(56,116,200,.15)}
+.search-bar select option{background:var(--bg-1)}
+
+/* Weight table */
+.wt-table{width:100%;border-collapse:collapse;font-size:12px}
+.wt-table th{text-align:left;padding:7px 8px;color:var(--text-2);border-bottom:1px solid var(--border-bright);font-weight:600;font-size:11px;letter-spacing:.5px}
+.wt-table td{padding:6px 8px;border-bottom:1px solid rgba(56,116,200,.08);color:var(--text-1)}
+.wt-table tr:hover td{background:rgba(56,116,200,.06)}
+.wt-table .hit{color:var(--orange);font-weight:600}
+.wt-bar{display:inline-block;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--blue-d),var(--blue-l));vertical-align:middle;margin-right:6px}
+
+/* Source card */
+.src{background:rgba(16,32,64,.4);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin:6px 0;transition:all .2s}
+.src:hover{border-color:var(--border-bright)}
+.src .src-name{font-size:13px;color:#fff;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.src .src-info{font-size:11px;color:var(--text-2);line-height:1.7}
+
+/* Warning card */
+.wcard{background:rgba(16,32,64,.4);border:1px solid var(--border);border-left:3px solid;border-radius:var(--r-sm);padding:10px 14px;margin:5px 0;transition:all .15s}
+.wcard:hover{background:rgba(20,40,80,.5)}
+.wcard .whead{display:flex;justify-content:space-between;align-items:center}
+.wcard .wname{font-size:13px;color:#fff;font-weight:600}
+.wcard .winfo{font-size:11px;color:var(--text-2);margin-top:5px;line-height:1.6}
+
+/* Badge */
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;letter-spacing:.5px}
+
+/* Progress bar */
+.pbar{height:4px;background:rgba(56,116,200,.1);border-radius:2px;overflow:hidden;margin-top:4px}
+.pbar-fill{height:100%;border-radius:2px;transition:width .3s}
+
+/* Detail popup */
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(3,8,20,.88);display:none;justify-content:center;align-items:center;z-index:999;backdrop-filter:blur(6px)}
+.popup{background:linear-gradient(180deg,rgba(15,30,58,.95),rgba(7,14,29,.95));border:1px solid var(--border-bright);border-radius:16px;padding:28px;max-width:820px;max-height:88vh;overflow:auto;width:92%;position:relative;box-shadow:0 12px 48px rgba(0,0,0,.5)}
+.popup h2{font-size:22px;margin-bottom:4px;font-weight:700;letter-spacing:1px}
+.popup .sub{font-size:14px;color:var(--text-2);margin-bottom:20px}
+.popup .detail-grid{display:grid;grid-template-columns:300px 1fr;gap:20px}
+.popup .dim{margin-bottom:16px}
+.popup .dim-t{font-size:13px;color:var(--blue-l);font-weight:600;margin-bottom:8px;padding-left:10px;border-left:3px solid var(--blue);letter-spacing:.5px}
+.popup .dim-r{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;color:var(--text-1)}
+.popup .dim-r span:last-child{color:var(--text-2);text-align:right;max-width:200px;word-break:break-all}
+.popup .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.popup .tag{padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.popup-close{position:absolute;top:16px;right:20px;font-size:24px;color:var(--text-3);cursor:pointer;background:none;border:none;transition:color .2s;line-height:1}
+.popup-close:hover{color:#fff}
+
+/* Update form */
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:12px;color:var(--text-2);margin-bottom:5px;letter-spacing:.5px}
+.form-group select,.form-group input,.form-group textarea{width:100%;background:rgba(7,14,29,.6);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;color:#fff;font-size:12px;outline:none;transition:all .2s;font-family:inherit}
+.form-group select:focus,.form-group input:focus,.form-group textarea:focus{border-color:var(--blue-l)}
+.form-group textarea{min-height:64px;resize:vertical}
+.btn-submit{width:100%;background:linear-gradient(135deg,var(--blue),var(--blue-d));border:none;color:#fff;padding:10px;border-radius:var(--r-sm);cursor:pointer;font-size:14px;font-weight:600;transition:all .2s;letter-spacing:1px}
+.btn-submit:hover{box-shadow:0 4px 16px rgba(56,116,200,.3)}
+
+.log-item{padding:10px 14px;background:rgba(7,14,29,.4);border-radius:var(--r-sm);margin:5px 0;font-size:11px;color:var(--text-1);border-left:2px solid var(--blue);line-height:1.7}
+.empty{text-align:center;padding:40px 20px;color:var(--text-3);font-size:13px}
+
+/* Level colors */
+.l-red{color:var(--red)}.l-orange{color:var(--orange)}.l-yellow{color:var(--yellow)}.l-blue{color:var(--green)}
+.bg-r{background:var(--red)}.bg-o{background:var(--orange)}.bg-y{background:var(--yellow)}.bg-g{background:var(--green)}
+.bg-r-soft{background:rgba(255,77,79,.15);color:var(--red);border:1px solid rgba(255,77,79,.25)}
+.bg-o-soft{background:rgba(255,140,66,.15);color:var(--orange);border:1px solid rgba(255,140,66,.25)}
+.bg-y-soft{background:rgba(255,204,68,.15);color:var(--yellow);border:1px solid rgba(255,204,68,.25)}
+.bg-g-soft{background:rgba(54,198,103,.15);color:var(--green);border:1px solid rgba(54,198,103,.25)}
+
+/* Rule box */
+.rule-box{margin-top:10px;padding:12px;background:rgba(7,14,29,.4);border-radius:var(--r-sm);font-size:11px;color:var(--text-2);line-height:1.8}
+.rule-box .rt{color:var(--orange);font-weight:600;margin-bottom:6px;font-size:12px}
+
+/* Mini chart container */
+.chart-box{width:100%;flex:1;min-height:120px}
+
+/* Dual column for tags */
+.tag-cols{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}
+</style>
+</head>
+<body>
+
+<div id="loadErr">
+  <div style="font-size:20px;margin-bottom:16px">库文件加载失败</div>
+  <div>请确保 <strong>libs</strong> 文件夹与本HTML文件在同一目录下<br>或将本HTML文件与libs文件夹一起复制到其他电脑使用</div>
+</div>
+
+<div class="header">
+  <h1>信访人画像分析系统</h1>
+  <div class="right">
+    <span><span class="dot"></span>系统运行中</span>
+    <span class="stat-pill" id="personCount">未上传数据</span>
+    <button onclick="resetData()">重新上传</button>
+  </div>
+</div>
+
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab active" onclick="switchTab('collect')">数据采集</div>
+  <div class="tab" onclick="switchTab('portrait')">画像构建</div>
+  <div class="tab" onclick="switchTab('classify')">分级分类</div>
+  <div class="tab" onclick="switchTab('warning')">路径预测</div>
+  <div class="tab" onclick="switchTab('update')">画像更新</div>
+</div>
+
+<div class="upload-zone" id="uploadZone">
+  <div class="icon">&#128202;</div>
+  <div class="title">拖拽数据文件到此处，或点击选择</div>
+  <div class="desc">支持 .xlsx / .xls / .csv / .db / .sqlite 格式，可同时上传多个文件<br>系统将自动解析数据、提取标签、计算风险评分</div>
+  <div class="upload-tabs">
+    <button class="utab active" onclick="setUploadMode('file',this)">文件上传</button>
+    <button class="utab" onclick="setUploadMode('db',this)">数据库对接</button>
+  </div>
+  <div id="fileUploadPanel">
+    <div class="files" id="fileList"></div>
+    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.db,.sqlite,.sqlite3" style="display:none" onchange="handleFiles(this.files)">
+    <button class="upbtn" onclick="document.getElementById('fileInput').click()">选择文件</button>
+  </div>
+  <div id="dbUploadPanel" style="display:none">
+    <div class="db-config">
+      <div class="db-row"><label>数据库类型</label>
+        <select id="dbType" onchange="toggleDbType()">
+          <option value="sqlite">SQLite 文件 (.db/.sqlite)</option>
+          <option value="api">API 接口 (REST)</option>
+        </select>
+      </div>
+      <div class="db-row" id="dbFileRow"><label>数据库文件</label>
+        <input type="file" id="dbFileInput" accept=".db,.sqlite,.sqlite3" style="display:none" onchange="handleDbFile(this.files[0])">
+        <button class="upbtn" onclick="document.getElementById('dbFileInput').click()">选择 .db 文件</button>
+        <span id="dbFileName" style="margin-left:8px;color:#8fa4c7;font-size:12px"></span>
+      </div>
+      <div class="db-row" id="dbApiRow" style="display:none"><label>API地址</label>
+        <input type="text" id="dbApiUrl" placeholder="https://api.example.com/data" style="flex:1;padding:6px 10px;border:1px solid #1e3a5f;background:rgba(10,20,40,.6);color:#e0e8ff;border-radius:4px">
+      </div>
+      <div class="db-row" id="dbTableRow"><label>数据表名</label>
+        <input type="text" id="dbTableName" placeholder="person_data" style="flex:1;padding:6px 10px;border:1px solid #1e3a5f;background:rgba(10,20,40,.6);color:#e0e8ff;border-radius:4px">
+      </div>
+      <div class="db-row" style="justify-content:center;gap:12px">
+        <button class="upbtn" onclick="connectDatabase()">连接并解析</button>
+        <span id="dbStatus" style="font-size:12px;color:#8fa4c7"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Module 1: Data Collection -->
+<div class="module" id="modCollect" style="grid-template-rows:auto 1fr;grid-template-columns:1fr 1fr;grid-template-areas:'collect collect''cluster export'">
+  <!-- 上方：采集统计 + 数据源分布 + 文件清单 -->
+  <div class="col" style="grid-area:collect;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <div class="card" style="flex-shrink:0">
+      <div class="card-title">采集统计</div>
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)" id="collectStats"></div>
+    </div>
+    <div class="card"><div class="card-title">数据源分布</div><div class="card-body" id="srcPanel"></div></div>
+    <div class="card"><div class="card-title">文件清单 <span class="count" id="fileCount"></span></div><div class="card-body" id="fileListPanel" style="max-height:120px;overflow-y:auto"></div></div>
+  </div>
+  <!-- 左下：智能聚类分析 -->
+  <div class="col" style="grid-area:cluster">
+    <div class="card" style="flex:1">
+      <div class="card-title">智能聚类分析 <span class="count" id="clusterCount">0</span>
+        <span style="float:right;font-size:11px;color:var(--text-3);font-weight:normal">多源数据自动识别聚类</span>
+      </div>
+      <div class="card-body" style="padding:12px">
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="utab active" onclick="runCluster('level',this)" style="padding:4px 10px;font-size:12px">按风险等级</button>
+          <button class="utab" onclick="runCluster('region',this)" style="padding:4px 10px;font-size:12px">按地区</button>
+          <button class="utab" onclick="runCluster('tags',this)" style="padding:4px 10px;font-size:12px">按标签</button>
+          <button class="utab" onclick="runCluster('source',this)" style="padding:4px 10px;font-size:12px">按数据源</button>
+        </div>
+        <div id="clusterResult" style="font-size:12px;max-height:240px;overflow-y:auto">
+          <div style="color:var(--text-3);text-align:center;padding:20px">上传数据后自动聚类分析</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- 右下：数据导出中心 -->
+  <div class="col" style="grid-area:export">
+    <div class="card" style="flex:1">
+      <div class="card-title">数据导出中心
+        <span style="float:right;font-size:11px;color:var(--text-3);font-weight:normal">6种格式可选导出</span>
+      </div>
+      <div class="card-body" style="padding:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button class="upbtn" onclick="exportData('portrait_xlsx')" style="padding:8px;background:linear-gradient(135deg,#1a4a7a,#0d2847)">
+            <div style="font-weight:600;font-size:12px">📊 画像数据</div>
+            <div style="font-size:9px;color:var(--text-3);margin-top:1px">Excel格式</div>
+          </button>
+          <button class="upbtn" onclick="exportData('cluster_xlsx')" style="padding:8px;background:linear-gradient(135deg,#1a4a7a,#0d2847)">
+            <div style="font-weight:600;font-size:12px">🔍 聚类数据</div>
+            <div style="font-size:9px;color:var(--text-3);margin-top:1px">Excel格式</div>
+          </button>
+          <button class="upbtn" onclick="exportData('route_xlsx')" style="padding:8px;background:linear-gradient(135deg,#1a4a7a,#0d2847)">
+            <div style="font-weight:600;font-size:12px">🗺️ 路径数据</div>
+            <div style="font-size:9px;color:var(--text-3);margin-top:1px">Excel格式</div>
+          </button>
+          <button class="upbtn" onclick="exportData('full_xlsx')" style="padding:8px;background:linear-gradient(135deg,#2a5a8a,#0d2847)">
+            <div style="font-weight:600;font-size:12px">📦 全量数据</div>
+            <div style="font-size:9px;color:var(--text-3);margin-top:1px">Excel格式</div>
+          </button>
+          <button class="upbtn" onclick="exportData('portrait_json')" style="padding:8px;background:linear-gradient(135deg,#0d3a5a,#0a1a2a)">
+            <div style="font-weight:600;font-size:12px">📋 画像JSON</div>
+            <div style="font-size:9px;color:var(--text-3);margin-top:1px">结构化数据</div>
+          </button>
+          <button class="upbtn" onclick="exportData('route_json')" style="padding:8px;background:linear-gradient(135deg,#0d3a5a,#0a1a2a)">
+            <div style="font-weight:600;font-size:12px">🗺️ 路径JSON</div>
+            <div style="font-size:9px;color:var(--text-3);margin-top:1px">结构化数据</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Module 2: Portrait Construction -->
+<div class="module" id="modPortrait" style="grid-template-columns:260px minmax(0,1fr) 280px">
+  <div class="col">
+    <div class="card" style="flex-shrink:0">
+      <div class="card-title">统计概览</div>
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr" id="portraitStats"></div>
+    </div>
+    <div class="card" style="flex:1"><div class="card-title">风险分布</div><div class="chart-box" id="riskChart"></div></div>
+  </div>
+  <div class="col">
+    <div class="card" style="flex-shrink:0">
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="搜索姓名 / 身份证号 / 住址..." oninput="renderPersonGrid()">
+        <select id="levelFilter" onchange="renderPersonGrid()"><option value="">全部等级</option><option value="红色">红色</option><option value="橙色">橙色</option><option value="黄色">黄色</option><option value="蓝色">蓝色</option></select>
+      </div>
+    </div>
+    <div class="card" style="flex:1"><div class="card-title">人员画像列表 <span class="count" id="personCount2"></span></div><div class="card-body"><div class="person-list" id="personGrid"></div></div></div>
+  </div>
+  <div class="col">
+    <div class="card" style="flex:1"><div class="card-title">标签命中统计</div><div class="card-body" id="tagHitPanel"></div></div>
+  </div>
+</div>
+
+<!-- Module 3: Classification -->
+<div class="module" id="modClassify" style="grid-template-columns:1fr 1fr">
+  <div class="col">
+    <div class="card"><div class="card-title">四级风险分布</div><div class="chart-box" id="classifyChart"></div></div>
+    <div class="card" style="flex:1"><div class="card-title">分级管控措施</div><div class="card-body" id="controlPanel"></div></div>
+  </div>
+  <div class="col">
+    <div class="card" style="flex:1"><div class="card-title">赋分权重表</div><div class="card-body" id="weightPanel"></div></div>
+  </div>
+</div>
+
+<!-- Module 4: Warning & Route Prediction (预警与路径预测模块) -->
+<div class="module" id="modWarning" style="grid-template-rows:1fr;grid-template-columns:clamp(140px,16%,220px) minmax(300px,1fr) clamp(140px,18%,280px);grid-template-areas:'theory map detail'">
+  <!-- 左侧：预警统计 + 预测统计 -->
+  <div class="col" style="grid-area:theory">
+    <div class="card" style="flex-shrink:0">
+      <div class="card-title">预警等级分布</div>
+      <div class="chart-box" id="warningChart" style="height:180px"></div>
+    </div>
+    <div class="card" style="flex-shrink:0">
+      <div class="card-title">预测统计</div>
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr" id="predStats"></div>
+    </div>
+    <div class="card" style="flex:1;min-height:0">
+      <div class="card-title">目的地分布</div>
+      <div class="chart-box" id="predChart"></div>
+    </div>
+  </div>
+
+  <!-- 中间：离线地图 + 路径模拟 -->
+  <div class="col" style="grid-area:map">
+    <div class="card" style="height:100%">
+      <div class="card-title">
+        上访路径地图
+        <span style="margin-left:auto;display:flex;gap:14px;font-size:11px;color:var(--text-2);font-weight:400;align-items:center">
+          <span><i style="display:inline-block;width:12px;height:3px;background:#ff4d4f;margin-right:4px;vertical-align:middle;border-radius:2px"></i>红色 高风险</span>
+          <span><i style="display:inline-block;width:12px;height:3px;background:#ff8c42;margin-right:4px;vertical-align:middle;border-radius:2px"></i>橙色</span>
+          <span><i style="display:inline-block;width:12px;height:3px;background:#ffcc44;margin-right:4px;vertical-align:middle;border-radius:2px"></i>黄色</span>
+          <span><i style="display:inline-block;width:12px;height:3px;background:#36c667;margin-right:4px;vertical-align:middle;border-radius:2px"></i>绿色 低风险</span>
+        </span>
+      </div>
+      <div style="flex:1;position:relative;overflow:hidden;border-radius:8px;background:rgba(5,12,28,.85);display:flex;flex-direction:column;min-height:400px" id="mapContainer">
+        <!-- ECharts地图（优先） -->
+        <div id="routeMapChart" style="width:100%;height:100%;flex:1;min-height:380px;display:none"></div>
+        <!-- SVG地图（回退方案） -->
+        <svg id="chinaMap" viewBox="0 0 900 700" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;flex:1;display:block">
+          <defs>
+            <radialGradient id="mapGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="rgba(56,116,200,.12)"/>
+              <stop offset="100%" stop-color="rgba(56,116,200,0)"/>
+            </radialGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glowStrong">
+              <feGaussianBlur stdDeviation="3.5" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <ellipse cx="450" cy="350" rx="400" ry="280" fill="url(#mapGlow)"/>
+          <g id="provinceLayer" opacity="0.3"></g>
+          <g id="transportLayer" opacity="0.2"></g>
+          <g id="mapPaths"></g>
+          <g id="routeLines"></g>
+          <g id="cityDots"></g>
+          <g id="personMarkers"></g>
+          <g id="selectedRouteLayer"></g>
+        </svg>
+        <div id="mapTooltip" style="position:absolute;display:none;background:rgba(7,14,29,.96);border:1px solid rgba(80,150,255,.35);border-radius:6px;padding:10px 14px;font-size:12px;color:#fff;pointer-events:none;z-index:10;white-space:normal;box-shadow:0 4px 20px rgba(0,0,0,.5);min-width:200px;max-width:280px"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+        <button class="utab active" onclick="setMapView('national',this)">全国视图</button>
+        <button class="utab" onclick="setMapView('beijing',this)">聚焦北京</button>
+        <button class="utab" onclick="setMapView('province',this)">省京路径</button>
+        <button class="utab" onclick="animateRoutes()" id="animBtn">⏸ 暂停播放</button>
+        <button class="utab" onclick="exportRouteData()">导出路径数据</button>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-3)" id="mapInfoText">共0条路径</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧：选中人员路径详情 + 预警列表 -->
+  <div class="col" style="grid-area:detail">
+    <div class="card" id="routeDetailCard" style="flex-shrink:0;display:none">
+      <div class="card-title">路径预测详情 <span style="cursor:pointer;color:var(--text-3);font-size:14px" onclick="closeRouteDetail()">×</span></div>
+      <div class="card-body" id="routeDetailPanel" style="max-height:280px"></div>
+    </div>
+    <div class="card" style="flex:1;min-height:0">
+      <div class="card-title">预警人员列表 <span class="count" id="warnCount"></span></div>
+      <div class="card-body" id="warningListPanel"></div>
+    </div>
+  </div>
+
+  <!-- 下方：隐藏区域（备用） -->
+  <div class="col" style="grid-area:list;display:none">
+  </div>
+</div>
+<!-- Module 5: Portrait Update -->
+<div class="module" id="modUpdate" style="grid-template-columns:1fr 1fr">
+  <div class="col">
+    <div class="card" style="flex:1">
+      <div class="card-title">回流数据录入</div>
+      <div class="card-body" style="padding:16px">
+        <div class="form-group"><label>选择人员</label><select id="updPerson"><option value="">-- 选择人员 --</option></select></div>
+        <div class="form-group"><label>更新类型</label><select id="updType"><option value="化解成功">化解成功</option><option value="稳控到位">稳控到位</option><option value="新增信访">新增信访</option><option value="新增犯罪">新增犯罪</option><option value="新增进京">新增进京</option><option value="新增投诉">新增投诉</option></select></div>
+        <div class="form-group"><label>内容描述</label><textarea id="updContent" placeholder="录入回流内容..."></textarea></div>
+        <button class="btn-submit" onclick="submitUpdate()">提交更新</button>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card" style="flex:1"><div class="card-title">更新日志 <span class="count" id="logCount"></span></div><div class="card-body" id="updateLogPanel"></div></div>
+  </div>
+</div>
+
+<div class="overlay" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+  <div class="popup"><button class="popup-close" onclick="closeDetail()">&#215;</button><div id="detailContent"></div></div>
+</div>
+
+<script>
+const W={"违规上访":50,"进京上访":45,"极端社会危害":35,"涉枪涉毒涉爆":30,"到省厅上访":25,"多次进京":20,"邪教":20,"肇事肇祸精神病":20,"有犯罪记录":15,"到市局上访":12,"高发信访_大于5次":12,"多头访":10,"精神病人":10,"进京火车记录":12,"进京航班记录":12,"未化解":8,"已办结未化解":8,"到部初访":8,"到省初访":6,"投诉警情未受理又信访":6,"投诉已办结仍信访":6,"未处置_2018后":6,"残疾人":4,"低保":4,"离异":4,"个体经商":2,
+"涉诉信访":8,"涉征拆迁":10,"涉法涉诉":10,"劳动社保":6,"退役军人":8,"医患纠纷":5,"教育问题":4,"环保问题":3,"金融投资":8,"物业纠纷":3,"邻里纠纷":2,"交通纠纷":3,"涉警信访":8,"缠访闹访":15,"集体访":12,"重复访":10,"越级访":15,"信访老户":10,"无正当理由信访":8,"扬言极端":20,"自杀自残倾向":18,"携带危险物品":25,"串联煽动":18,"网上炒作":12,"境外背景":30,"政历问题":15,"涉军退役":10,"失独家庭":5,"留守老人":3,"留守妇女":3,"留守儿童":3,"刑满释放":12,"吸毒史":15,"赌博恶习":6,"酗酒滋事":5,"流浪乞讨":4,"无固定职业":6,"外来人口":4,"流动人口":3,"长期在外":8,"居无定所":6};
+const TH={"红色":80,"橙色":40,"黄色":20,"蓝色":0};
+const LC={"红色":"#ff4d4f","橙色":"#ff8c42","黄色":"#ffcc44","蓝色":"#36c667"};
+const LBG={"红色":"rgba(255,77,79,.12)","橙色":"rgba(255,140,66,.12)","黄色":"rgba(255,204,68,.12)","蓝色":"rgba(54,198,103,.12)"};
+let persons=[],files=[],logs=[];
+let chartInstances={};
+
+// ============ 安全工具函数 ============
+// XSS防护：HTML转义
+function escHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+// 文件大小限制（50MB）
+const MAX_FILE_SIZE=50*1024*1024;
+function validateFile(f){
+  if(f.size>MAX_FILE_SIZE){alert('文件 '+f.name+' 超过50MB限制');return false;}
+  const ext=f.name.split('.').pop().toLowerCase();
+  const allowed=['xlsx','xls','csv','db','sqlite','sqlite3'];
+  if(allowed.indexOf(ext)===-1){alert('不支持的文件格式: '+ext);return false;}
+  return true;
+}
+// 安全字符串截断
+function safeStr(s,max){if(!s)return'';s=String(s);return s.length>max?s.substring(0,max):s;}
+
+// ============ 上传模式切换 ============
+function setUploadMode(m,btn){
+  document.querySelectorAll('.utab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('fileUploadPanel').style.display=m==='file'?'block':'none';
+  document.getElementById('dbUploadPanel').style.display=m==='db'?'block':'none';
+}
+function toggleDbType(){
+  const t=document.getElementById('dbType').value;
+  document.getElementById('dbFileRow').style.display=t==='sqlite'?'flex':'none';
+  document.getElementById('dbApiRow').style.display=t==='api'?'flex':'none';
+  document.getElementById('dbStatus').textContent='';
+}
+let _dbFile=null;
+function handleDbFile(f){if(f){_dbFile=f;document.getElementById('dbFileName').textContent=f.name+' ('+(f.size/1024/1024).toFixed(1)+'MB)';}}
+
+// ============ CSV解析（纯JS实现，不依赖XLSX，支持多编码）============
+function detectCSVEncoding(uint8){
+  // 检测BOM
+  if(uint8.length>=3&&uint8[0]===0xEF&&uint8[1]===0xBB&&uint8[2]===0xBF)return 'utf-8-bom';
+  if(uint8.length>=2&&uint8[0]===0xFF&&uint8[1]===0xFE)return 'utf-16-le';
+  if(uint8.length>=2&&uint8[0]===0xFE&&uint8[1]===0xFF)return 'utf-16-be';
+  
+  // 启发式检测：尝试UTF-8严格解码
+  try{
+    const txt=new TextDecoder('utf-8',{fatal:true}).decode(uint8.slice(0,Math.min(2000,uint8.length)));
+    // 检查中文字符比例
+    let chineseCount=0;let totalChars=0;
+    for(let i=0;i<txt.length;i++){
+      const code=txt.charCodeAt(i);
+      if(code>=0x4E00&&code<=0x9FFF)chineseCount++;
+      if(code>32)totalChars++;
+    }
+    // UTF-8解码成功且有中文，用UTF-8
+    if(chineseCount>5&&totalChars>10)return 'utf-8';
+    // UTF-8解码成功但几乎没有中文（可能是英文/数字），也用UTF-8
+    if(totalChars>20&&chineseCount===0)return 'utf-8';
+  }catch(e){
+    // UTF-8严格解码失败，很可能是GBK
+    return 'gbk';
+  }
+  
+  // UTF-8能解码但中文很少，可能是GBK误判，尝试GBK
+  return 'gbk';
+}
+
+function decodeCSVBuffer(buf){
+  const uint8=new Uint8Array(buf);
+  const enc=detectCSVEncoding(uint8);
+  
+  // 按优先级尝试多种编码
+  const tryDecoders=[];
+  
+  if(enc==='utf-8-bom'){
+    tryDecoders.push(['utf-8',3]); // skip BOM
+  }else if(enc==='utf-16-le'){
+    tryDecoders.push(['utf-16le',2]);
+  }else if(enc==='utf-16-be'){
+    tryDecoders.push(['utf-16be',2]);
+  }else if(enc==='gbk'){
+    tryDecoders.push(['gbk',0]);
+    tryDecoders.push(['gb2312',0]);
+    tryDecoders.push(['utf-8',0]);
+  }else{
+    tryDecoders.push(['utf-8',0]);
+    tryDecoders.push(['gbk',0]);
+  }
+  
+  for(let i=0;i<tryDecoders.length;i++){
+    const [encoding,skip]=tryDecoders[i];
+    try{
+      const data=skip>0?uint8.slice(skip):uint8;
+      const txt=new TextDecoder(encoding,{fatal:true}).decode(data);
+      // 验证：检查是否有可识别的内容
+      if(txt&&txt.length>0){
+        // 检查乱码率（替换字符的数量）
+        const replacementCount=(txt.match(/\uFFFD/g)||[]).length;
+        if(replacementCount/txt.length<0.1){ // 乱码率低于10%
+          return txt;
+        }
+      }
+    }catch(e){
+      // 该编码不支持或解码失败，尝试下一个
+      continue;
+    }
+  }
+  
+  // 最后回退：宽松的UTF-8解码
+  try{return new TextDecoder('utf-8').decode(uint8);}catch(e3){return '';}
+}
+
+function parseCSV(text){
+  const rows=[];let row=[],cell='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{inQ=false;}}
+      else cell+=c;
+    }else{
+      if(c==='"')inQ=true;
+      else if(c===','){row.push(cell);cell='';}
+      else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}
+      else if(c==='\r'){/* skip */}
+      else cell+=c;
+    }
+  }
+  if(cell||row.length){row.push(cell);rows.push(row);}
+  if(!rows.length)return[];
+  const headers=rows[0].map(h=>h.trim());
+  const data=[];
+  for(let i=1;i<rows.length;i++){
+    if(!rows[i].length||(rows[i].length===1&&!rows[i][0]))continue;
+    const obj={};
+    for(let j=0;j<headers.length;j++){obj[headers[j]]=rows[i][j]||'';}
+    data.push(obj);
+  }
+  return data;
+}
+
+// ============ SQLite解析（使用sql.js）============
+let _sqljsLoaded=false,_sqljsLoading=false;
+function loadSqlJs(cb){
+  if(_sqljsLoaded){cb(true);return;}
+  if(_sqljsLoading){setTimeout(()=>loadSqlJs(cb),200);return;}
+  _sqljsLoading=true;
+  // 尝试本地加载
+  _ld('libs/sql-wasm.js',function(ok){
+    if(ok&&window.initSqlJs){
+      initSqlJs({locateFile:f=>'libs/'+f}).then(function(SQL){
+        window.SQL=SQL;_sqljsLoaded=true;_sqljsLoading=false;cb(true);
+      }).catch(function(){_sqljsLoading=false;cb(false);});
+    }else{
+      // CDN回退
+      _ld('https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js',function(ok2){
+        if(ok2&&window.initSqlJs){
+          initSqlJs({locateFile:f=>'https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/'+f}).then(function(SQL){
+            window.SQL=SQL;_sqljsLoaded=true;_sqljsLoading=false;cb(true);
+          }).catch(function(){_sqljsLoading=false;cb(false);});
+        }else{_sqljsLoading=false;cb(false);}
+      });
+    }
+  });
+}
+
+function parseSqliteDb(buf,tableName){
+  if(!window.SQL)return [];
+  const db=new SQL.Database(new Uint8Array(buf));
+  const tables=[];
+  let rows;
+  try{
+    const res=db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+    if(res&&res.length)res[0].values.forEach(v=>tables.push(v[0]));
+  }catch(e){}
+  if(!tables.length)return [];
+  let tbl=tableName||tables[0];
+  if(tables.indexOf(tbl)===-1)tbl=tables[0];
+  try{
+    const res=db.exec("SELECT * FROM "+tbl+" LIMIT 5000");
+    if(!res||!res.length)return [];
+    const cols=res[0].columns;
+    const data=[];
+    res[0].values.forEach(v=>{const o={};cols.forEach((c,i)=>{o[c]=v[i]!==null?v[i]:'';});data.push(o);});
+    db.close();
+    return {data,table:tbl,tables};
+  }catch(e){db.close();return {data:[],table:'',tables,error:e.message};}
+}
+
+// ============ API数据获取 ============
+async function fetchApiData(url){
+  try{
+    const res=await fetch(url,{method:'GET',headers:{'Accept':'application/json'}});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const json=await res.json();
+    // 兼容多种返回格式
+    let data;
+    if(Array.isArray(json))data=json;
+    else if(json.data&&Array.isArray(json.data))data=json.data;
+    else if(json.result&&Array.isArray(json.result))data=json.result;
+    else if(json.rows&&Array.isArray(json.rows))data=json.rows;
+    else if(json.list&&Array.isArray(json.list))data=json.list;
+    else return {data:[],error:'无法解析返回数据格式'};
+    return {data:data.slice(0,5000),total:data.length};
+  }catch(e){return {data:[],error:e.message};}
+}
+
+// ============ 数据库连接入口 ============
+async function connectDatabase(){
+  const type=document.getElementById('dbType').value;
+  const status=document.getElementById('dbStatus');
+  status.style.color='#8fa4c7';status.textContent='连接中...';
+
+  if(type==='sqlite'){
+    if(!_dbFile){status.style.color='#ff4d4f';status.textContent='请先选择数据库文件';return;}
+    if(!validateFile(_dbFile)){status.textContent='';return;}
+    loadSqlJs(async function(ok){
+      if(!ok){status.style.color='#ff4d4f';status.textContent='sql.js库加载失败，请检查网络或libs文件夹';return;}
+      try{
+        const buf=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsArrayBuffer(_dbFile);});
+        const tbl=document.getElementById('dbTableName').value.trim();
+        const res=parseSqliteDb(buf,tbl);
+        if(res&&res.data&&res.data.length){
+          status.textContent='已读取 '+res.data.length+' 条记录（表: '+res.table+'）';
+          parseDataArray(res.data,_dbFile.name,res.table);
+        }else{status.style.color='#ff4d4f';status.textContent='解析失败: '+(res.error||'无数据');}
+      }catch(e){status.style.color='#ff4d4f';status.textContent='错误: '+e.message;}
+    });
+  }else if(type==='api'){
+    const url=document.getElementById('dbApiUrl').value.trim();
+    if(!url){status.style.color='#ff4d4f';status.textContent='请输入API地址';return;}
+    if(!/^https?:\/\//i.test(url)){status.style.color='#ff4d4f';status.textContent='请输入有效的http/https地址';return;}
+    const res=await fetchApiData(url);
+    if(res.data&&res.data.length){
+      status.textContent='已读取 '+res.data.length+' 条记录';
+      parseDataArray(res.data,'API数据','api');
+    }else{status.style.color='#ff4d4f';status.textContent='获取失败: '+(res.error||'无数据');}
+  }
+}
+
+// 将数据数组转换为虚拟文件并进入解析流程
+function parseDataArray(data,fname,sheetName){
+  if(typeof XLSX==='undefined'){alert('SheetJS库未加载');return;}
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,sheetName||'Sheet1');
+  const fakeFile={name:fname,size:0,type:'application/octet-stream',_wb:wb};
+  files=[fakeFile];
+  parseFilesFromWb(wb,fname,sheetName||'Sheet1');
+}
+
+// 从workbook直接解析（数据库/API路径）
+function parseFilesFromWb(wb,fname,sn){
+  if(typeof echarts==='undefined'){alert('ECharts库未加载');return;}
+  persons=[];const pm={};
+  const sheetNames=wb.SheetNames;
+  for(const sName of sheetNames){
+    const ws=wb.Sheets[sName];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    const st=detectSrc(fname,sName);
+    rows.forEach((r,ri)=>processRow(r,pm,st,fname,sName,ri));
+  }
+  finalizeParse(pm);
+}
+
+// 最终化解析结果
+function finalizeParse(pm){
+  persons=Object.values(pm);
+  // 历史案件汇总统计
+  for(const p of persons){
+    p.totalRecords=p.rows.length;
+    // 按来源分类统计
+    p.srcStats={信访史:0,警情史:0,执法记录:0,稳控数据:0,预警数据:0,其他:0};
+    p.rows.forEach(r=>{const s=r.src;p.srcStats[s]=(p.srcStats[s]||0)+1;});
+    // 信访历史记录数
+    p.petitionHistory=Math.max(p.petitionCount,p.srcStats["信访史"]||0);
+    // 历史案件总数（所有来源）
+    p.totalCases=p.rows.length;
+    // 首次信访年份推断
+    let minYear=9999;
+    p.rows.forEach(r=>{
+      for(const k of Object.keys(r.r||{})){
+        const v=String(r.r[k]||'');
+        const m=v.match(/(19|20)\d{2}/);
+        if(m){const y=parseInt(m[0]);if(y>1990&&y<2100&&y<minYear)minYear=y;}
+      }
+    });
+    p.firstYear=minYear<9999?minYear:'';
+    p.petitionYears=p.firstYear?(new Date().getFullYear()-p.firstYear):0;
+    // 年均信访次数
+    p.avgPerYear=p.petitionYears>0?Math.round(p.petitionCount/p.petitionYears*10)/10:p.petitionCount;
+  }
+  for(const p of persons){p.tags=extractTags(p);const sc=calcScore(p.tags,p);p.score=sc.score;p.detail=sc.detail;p.level=classify(sc.score);p.warn=genWarn(p);p.radar=getRadar(p);p.srcs=Array.from(p.srcs);p.fNames=Array.from(p.fNames);}
+  persons.sort((a,b)=>b.score-a.score);
+  showDashboard();
+  // 自动执行聚类分析
+  setTimeout(function(){runCluster('level');},300);
+}
+
+function handleFiles(fl){
+  // 文件校验
+  const valid=[];
+  for(let i=0;i<fl.length;i++){if(validateFile(fl[i]))valid.push(fl[i]);}
+  if(!valid.length)return;
+  files=valid;let h='';
+  files.forEach((f,i)=>{h+=`<div class="file-item"><span>&#128196; ${escHtml(f.name)} (${(f.size/1024).toFixed(0)}KB)</span><span class="del" onclick="removeFile(${i})">&#10005;</span></div>`});
+  document.getElementById('fileList').innerHTML=h;parseFiles();
+}
+function removeFile(i){files.splice(i,1);if(!files.length){document.getElementById('fileList').innerHTML='';return;}
+  const dt=new DataTransfer();files.forEach(f=>dt.items.add(f));document.getElementById('fileInput').files=dt.files;
+  let h='';files.forEach((f,i)=>{h+=`<div class="file-item"><span>&#128196; ${escHtml(f.name)}</span><span class="del" onclick="removeFile(${i})">&#10005;</span></div>`});
+  document.getElementById('fileList').innerHTML=h;
+}
+
+// 单条记录处理（供所有数据来源复用）
+function processRow(r,pm,st,fname,sn,ri){
+  const id=ff(r,['身份证号','身份证','证件号码','身份号','身份证号码','证件号','身份号码']);const nm=ff(r,['姓名','名字','人员姓名','name','举报人','信访人','当事人','人员名称','申请人','投诉人']);
+  if(!id&&!nm)return;const k=id||(nm+'_'+Object.keys(pm).length);
+  if(!pm[k]){pm[k]={idCard:id||'',name:nm||'',address:ff(r,['住址','地址','居住地','家庭住址','户籍地','户籍地址','所在地址','现住址'])||'',gender:ff(r,['性别','sex'])||'',education:ff(r,['学历','文化程度','文化'])||'',ageGroup:ff(r,['年龄段','年龄'])||'',phone:ff(r,['电话','手机','联系方式','联系电话','手机号码','手机号','联系电话'])||'',petitionCount:0,crimeCount:0,bjT:0,bjF:0,complaintCount:0,pContent:'',pDest:'',rStatus:'',sType:'',cRecord:'',mStatus:'',occ:'',gStatus:'',rows:[],srcs:new Set(),fNames:new Set()};}
+  const p=pm[k];p.srcs.add(st);p.fNames.add(fname);p.rows.push({src:st,file:fname,sn,r});
+  const ct=ff(r,['信访内容','内容','诉求','诉求内容','反映问题','概况','案件名称','举报内容','投诉内容','主要诉求','反映内容','事项内容','问题描述']);if(ct)p.pContent=(p.pContent?p.pContent+'|':'')+ct;
+  const pc=ff(r,['信访次数','信访量','上访次数','重复次数','投诉次数','举报次数','反映次数']);
+  if(pc&&!isNaN(parseInt(pc)))p.petitionCount=Math.max(p.petitionCount,parseInt(pc));
+  else if(ct||ff(r,['信访件编号','信访编号','案件编号','举报编号','投诉编号','工单编号','流水号']))p.petitionCount+=1;
+  const cc=ff(r,['犯罪次数','犯罪记录数']);if(cc&&!isNaN(parseInt(cc)))p.crimeCount=Math.max(p.crimeCount,parseInt(cc));
+  const d=ff(r,['信访去向','去向','接待单位','接待部门','受理单位','承办单位','责任单位','办理单位','被举报单位','涉事单位']);if(d)p.pDest=(p.pDest?p.pDest+'|':'')+d;
+  const st_=ff(r,['化解状态','状态','处置状态','办结状态','处理结果']);if(st_)p.rStatus=st_;
+  const sp=ff(r,['特殊人群类型','人员类型','管控类型','标签','分类']);if(sp)p.sType=(p.sType?p.sType+'|':'')+sp;
+  const cr=ff(r,['犯罪记录','犯罪情况','案底','前科']);if(cr)p.cRecord=(p.cRecord?p.cRecord+'|':'')+cr;
+  const arr=ff(r,['到达站','到站','终点站','到达']);const tm=ff(r,['交通方式','出行方式'])||(fname.includes('火车')||sn.includes('火车')?'火车':fname.includes('航班')||sn.includes('航班')?'航班':'');
+  if(arr&&arr.includes('北京')){if(tm==='航班'||fname.includes('航班')||sn.includes('航班'))p.bjF++;else p.bjT++;}
+  const ma=ff(r,['婚姻状况','婚姻','婚况']);if(ma)p.mStatus=ma;
+  const oc=ff(r,['职业','工作','身份']);if(oc)p.occ=oc;
+  const gu=ff(r,['保障状态','低保','社会保障']);if(gu)p.gStatus=gu;
+}
+
+async function parseFiles(){
+  if(!files.length)return;
+  if(typeof XLSX==='undefined'){alert('SheetJS库未加载，请确保libs文件夹存在或网络可用');return;}
+  if(typeof echarts==='undefined'){alert('ECharts库未加载，请确保libs文件夹存在或网络可用');return;}
+  persons=[];const pm={};
+  for(const f of files){
+    const ext=f.name.split('.').pop().toLowerCase();
+    // CSV文件：自动检测编码，优先用XLSX解析，失败则用原生解析器
+    if(ext==='csv'){
+      let buf;
+      try{buf=await f.arrayBuffer();}
+      catch(e){buf=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsArrayBuffer(f);});}
+      const text=decodeCSVBuffer(buf);
+      let rows=[];
+      try{const wb=XLSX.read(text,{type:'string'});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
+      catch(e){rows=parseCSV(text);}
+      if(rows.length){
+        const st=detectSrc(f.name,'CSV');
+        rows.forEach((r,ri)=>processRow(r,pm,st,f.name,'CSV',ri));
+      }
+      continue;
+    }
+    // DB/SQLite文件
+    if(ext==='db'||ext==='sqlite'||ext==='sqlite3'){
+      // 由数据库对接面板处理，此处跳过
+      continue;
+    }
+    // Excel文件
+    let buf;
+    try{buf=await f.arrayBuffer();}
+    catch(e){buf=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsArrayBuffer(f);});}
+    const wb=XLSX.read(buf,{type:'array'});
+    for(const sn of wb.SheetNames){
+      const ws=wb.Sheets[sn];const rows=XLSX.utils.sheet_to_json(ws,{defval:''});if(!rows.length)continue;
+      const st=detectSrc(f.name,sn);
+      rows.forEach((r,ri)=>processRow(r,pm,st,f.name,sn,ri));
+    }
+  }
+  finalizeParse(pm);
+}
+
+function detectSrc(fn,sn){
+  const t=(fn+' '+sn).toLowerCase();
+  if(t.includes('举报')||t.includes('投诉')||t.includes('12345')||t.includes('1234'))return'举报投诉';
+  if(t.includes('信访')||t.includes('上访')||t.includes('初访')||t.includes('来信来访'))return'信访史';
+  if(t.includes('警情')||t.includes('报警')||t.includes('出警')||t.includes('案件'))return'警情史';
+  if(t.includes('火车')||t.includes('票务')||t.includes('车票')||t.includes('航班')||t.includes('飞机')||t.includes('出行')||t.includes('进京'))return'出行记录';
+  if(t.includes('稳控')||t.includes('犯罪')||t.includes('特殊人群')||t.includes('精神病')||t.includes('肇事肇祸'))return'稳控数据';
+  if(t.includes('预警')||t.includes('重点人')||t.includes('人员信息')||t.includes('人员库'))return'预警数据';
+  if(t.includes('化解')||t.includes('办结')||t.includes('处置'))return'处置记录';
+  if(t.includes('多头访')||t.includes('集体访')||t.includes('重复访'))return'信访分类';
+  if(t.includes('线索')||t.includes('涉案'))return'涉案线索';
+  if(t.includes('单位')||t.includes('部门')||t.includes('排名'))return'单位统计';
+  return'其他数据';
+}
+function ff(r,names){for(const n of names){for(const k of Object.keys(r)){if(k.includes(n)||k.toLowerCase()===n.toLowerCase())return String(r[k]||'').trim();}}return'';}
+
+function extractTags(p){
+  const t={};const all=JSON.stringify(p.rows).toLowerCase();const d=(p.pDest||'').toLowerCase();const c=(p.pContent||'').toLowerCase();const st=(p.sType||'').toLowerCase();const bT=p.bjT+p.bjF;
+  // ===== 核心去向标签（5个）=====
+  t["违规上访"]=c.includes('违规')||c.includes('越级')||c.includes('非法')||c.includes('违法')||st.includes('违规')||st.includes('越级')||all.includes('违规上访')||all.includes('违规信访');
+  t["进京上访"]=d.includes('北京')||((p.petitionCount>0||p.pContent)&&bT>0)||c.includes('进京')||c.includes('北京')||all.includes('进京上访');
+  t["多次进京"]=bT>=3;
+  t["到省厅上访"]=(d.includes('省')&&!d.includes('北京'))||c.includes('到省')||c.includes('省信访')||all.includes('到省初访')||all.includes('到省');
+  t["到市局上访"]=(d.includes('市')&&!d.includes('省')&&!d.includes('北京'))||c.includes('到市')||c.includes('市信访');
+  // ===== 高危行为标签（8个）=====
+  t["极端社会危害"]=st.includes('极端')||st.includes('社会危害')||all.includes('极端社会危害')||all.includes('极端存在社会危害');
+  t["涉枪涉毒涉爆"]=(st.includes('枪')&&st.includes('毒'))||st.includes('爆')||all.includes('涉枪涉毒涉爆');
+  t["邪教"]=st.includes('邪教')||all.includes('邪教');
+  t["肇事肇祸精神病"]=st.includes('肇事')||st.includes('肇祸')||all.includes('肇事肇祸');
+  t["精神病人"]=(st.includes('精神')&&st.includes('病'))||all.includes('精神病人')||all.includes('精神病');
+  t["有犯罪记录"]=p.crimeCount>=1||p.cRecord.includes('有')||st.includes('犯罪')||all.includes('犯罪记录');
+  t["扬言极端"]=c.includes('扬言')||c.includes('报复社会')||c.includes('同归于尽')||c.includes('杀')||all.includes('扬言');
+  t["自杀自残倾向"]=c.includes('自杀')||c.includes('自残')||c.includes('跳楼')||c.includes('跳河')||c.includes('喝药');
+  t["携带危险物品"]=c.includes('汽油')||c.includes('刀具')||c.includes('爆炸物')||c.includes('危险物品')||all.includes('携带危险');
+  t["串联煽动"]=c.includes('串联')||c.includes('煽动')||c.includes('组织')||c.includes('策划')||all.includes('串联');
+  t["网上炒作"]=c.includes('网上')||c.includes('炒作')||c.includes('发帖')||c.includes('微博')||c.includes('微信');
+  t["境外背景"]=c.includes('境外')||c.includes('外媒')||c.includes('反华')||all.includes('境外背景');
+  t["政历问题"]=c.includes('政历')||c.includes('历史问题')||all.includes('政历问题');
+  // ===== 信访行为标签（10个）=====
+  t["高发信访_大于5次"]=p.petitionCount>5;
+  t["进京火车记录"]=p.bjT>0;
+  t["进京航班记录"]=p.bjF>0;
+  const ds=(p.pDest||'').split('|').filter(x=>x.trim());t["多头访"]=new Set(ds.map(x=>x.trim())).size>=2||all.includes('多头访');
+  t["缠访闹访"]=c.includes('缠访')||c.includes('闹访')||c.includes('滞留')||c.includes('起哄')||all.includes('缠访')||all.includes('闹访');
+  t["集体访"]=c.includes('集体访')||c.includes('群体访')||c.includes('多人')||all.includes('集体访');
+  t["重复访"]=p.petitionCount>=3||all.includes('重复访');
+  t["越级访"]=c.includes('越级')||all.includes('越级访')||t["违规上访"];
+  t["信访老户"]=p.petitionCount>=10||all.includes('信访老户')||all.includes('老上访户');
+  t["无正当理由信访"]=all.includes('无正当理由')||all.includes('无理访');
+  t["涉警信访"]=c.includes('公安')||c.includes('警察')||c.includes('民警')||c.includes('出警')||all.includes('涉警');
+  // ===== 信访内容分类标签（12个）=====
+  t["涉诉信访"]=c.includes('诉讼')||c.includes('法院')||c.includes('判决')||c.includes('起诉')||all.includes('涉诉');
+  t["涉征拆迁"]=c.includes('拆迁')||c.includes('征地')||c.includes('征收')||c.includes('补偿')||all.includes('拆迁');
+  t["涉法涉诉"]=c.includes('涉法')||c.includes('涉诉')||c.includes('司法')||c.includes('检察院')||all.includes('涉法涉诉');
+  t["劳动社保"]=c.includes('劳动')||c.includes('社保')||c.includes('工资')||c.includes('工伤')||c.includes('养老')||all.includes('劳动社保');
+  t["退役军人"]=c.includes('退伍')||c.includes('转业')||c.includes('军人')||c.includes('退役')||all.includes('退役军人')||st.includes('军人');
+  t["医患纠纷"]=c.includes('医院')||c.includes('医疗')||c.includes('医生')||c.includes('医患')||all.includes('医患');
+  t["教育问题"]=c.includes('教育')||c.includes('学校')||c.includes('老师')||c.includes('上学')||all.includes('教育');
+  t["环保问题"]=c.includes('环保')||c.includes('污染')||c.includes('环境')||c.includes('噪音')||all.includes('环保');
+  t["金融投资"]=c.includes('金融')||c.includes('投资')||c.includes('理财')||c.includes('诈骗')||c.includes('集资')||all.includes('金融');
+  t["物业纠纷"]=c.includes('物业')||c.includes('小区')||c.includes('业主')||all.includes('物业');
+  t["邻里纠纷"]=c.includes('邻里')||c.includes('邻居')||c.includes('相邻')||all.includes('邻里');
+  t["交通纠纷"]=c.includes('交通')||c.includes('车祸')||c.includes('事故')||c.includes('交警')||all.includes('交通纠纷');
+  // ===== 状态标签（4个）=====
+  const rs=(p.rStatus||'').toLowerCase();
+  t["未处置_2018后"]=(rs.includes('未处置')&&all.includes('2018'))||all.includes('未处置')||all.includes('212信访');
+  t["到省初访"]=all.includes('到省初访')||(d.includes('省')&&p.petitionCount<=1);
+  t["到部初访"]=all.includes('到部初访')||(d.includes('部')&&p.petitionCount<=1)||c.includes('到部');
+  t["已办结未化解"]=all.includes('已办结未化解')||(rs.includes('已办结')&&(rs.includes('未化解')||rs.includes('不化解')));
+  t["投诉警情未受理又信访"]=((all.includes('未受理')||all.includes('不受理'))&&p.petitionCount>0)||all.includes('投诉警情未受理');
+  t["投诉已办结仍信访"]=(all.includes('已办结')&&p.petitionCount>0)||all.includes('投诉已办结仍信访');
+  // ===== 社会属性标签（12个）=====
+  t["残疾人"]=st.includes('残疾')||all.includes('残疾人');
+  t["低保"]=(p.gStatus||'').toLowerCase().includes('低保')||all.includes('低保');
+  t["离异"]=(p.mStatus||'').toLowerCase().includes('离异')||(p.mStatus||'').toLowerCase()==='离'||all.includes('离异');
+  t["个体经商"]=(p.occ||'').toLowerCase().includes('个体')||(p.occ||'').toLowerCase().includes('经商')||all.includes('个体经商');
+  t["涉军退役"]=c.includes('退伍')||c.includes('转业')||c.includes('退役军人')||all.includes('涉军');
+  t["失独家庭"]=c.includes('失独')||all.includes('失独');
+  t["留守老人"]=(p.ageGroup||'').includes('老')||all.includes('留守老人');
+  t["刑满释放"]=c.includes('刑满')||c.includes('释放')||c.includes('出狱')||all.includes('刑满释放');
+  t["吸毒史"]=c.includes('吸毒')||st.includes('毒')||all.includes('吸毒史');
+  t["赌博恶习"]=c.includes('赌博')||all.includes('赌博');
+  t["无固定职业"]=c.includes('无业')||c.includes('无固定职业')||c.includes('失业')||all.includes('无业')||(p.occ||'').includes('无业');
+  t["长期在外"]=c.includes('长期在外')||c.includes('外出务工')||c.includes('常年在外')||all.includes('长期在外');
+  t["居无定所"]=c.includes('居无定所')||c.includes('流浪')||all.includes('居无定所')||all.includes('无固定住所');
+  return t;
+}
+
+function calcScore(tg,p){let s=0;const d=[];for(const[t,h]of Object.entries(tg)){if(h&&W[t]!==undefined){s+=W[t];d.push({tag:t,weight:W[t]});}}
+  if(p){
+    const bT=(p.bjT||0)+(p.bjF||0);
+    if(bT>1){const ex=(bT-1)*3;s+=ex;d.push({tag:'进京次数加分',weight:Math.round(ex*10)/10});}
+    if(p.petitionCount>3){const ex=(p.petitionCount-3)*2;s+=ex;d.push({tag:'信访次数加分',weight:Math.round(ex*10)/10});}
+    if(p.crimeCount>1){const ex=(p.crimeCount-1)*2;s+=ex;d.push({tag:'犯罪次数加分',weight:Math.round(ex*10)/10});}
+  }
+  d.sort((a,b)=>b.weight-a.weight);return{score:Math.round(s*10)/10,detail:d};}
+function classify(s){if(s>=80)return'红色';if(s>=40)return'橙色';if(s>=20)return'黄色';return'蓝色';}
+
+function getRadar(p){
+  const t=p.tags;
+  return[
+    {name:'信访',value:Math.min(100,(p.petitionCount*8)+(t["违规上访"]?30:0)+(t["多头访"]?10:0)+(t["高发信访_大于5次"]?15:0))},
+    {name:'进京',value:Math.min(100,(p.bjT+p.bjF)*20+(t["进京上访"]?20:0)+(t["多次进京"]?15:0))},
+    {name:'犯罪',value:Math.min(100,(p.crimeCount*25)+(t["有犯罪记录"]?20:0)+(t["涉枪涉毒涉爆"]?30:0)+(t["极端社会危害"]?25:0))},
+    {name:'稳控',value:Math.min(100,(t["违规上访"]?25:0)+(t["肇事肇祸精神病"]?20:0)+(t["邪教"]?20:0)+(t["精神病人"]?15:0)+(t["未化解"]?10:0)+(t["已办结未化解"]?10:0))},
+    {name:'投诉',value:Math.min(100,(p.complaintCount*10)+(t["投诉警情未受理又信访"]?20:0)+(t["投诉已办结仍信访"]?15:0))},
+    {name:'社会',value:Math.min(100,(t["残疾人"]?15:0)+(t["低保"]?10:0)+(t["离异"]?10:0)+(t["个体经商"]?5:0)+(t["到省厅上访"]?15:0)+(t["到市局上访"]?10:0))}
+  ];
+}
+
+function genWarn(p){
+  const bT=p.bjT+p.bjF;const t=p.tags;let l='无预警',a='常规关注';
+  const highRisk=t["扬言极端"]||t["携带危险物品"]||t["境外背景"]||t["串联煽动"];
+  if(highRisk&&bT>=1){l='红色预警';a='最高级别，立即布控拦截';}
+  else if(t["违规上访"]&&t["进京上访"]){l='红色预警';a='立即布控，拦截劝返';}
+  else if(bT>=3||(t["极端社会危害"]&&bT>=1)||(t["涉枪涉毒涉爆"]&&bT>=1)){l='红色预警';a='立即布控，拦截劝返';}
+  else if((t["进京上访"]&&t["有犯罪记录"])||t["缠访闹访"]||t["自杀自残倾向"]){l='橙色预警';a='专人跟踪，随时报告';}
+  else if(t["违规上访"]||t["进京上访"]||t["集体访"]||t["越级访"]){l='橙色预警';a='专人跟踪，随时报告';}
+  else if(t["到省厅上访"]||p.score>=20||t["重复访"]){l='黄色预警';a='定期联系，掌握动态';}
+  else if(bT>0||p.score>=12||t["信访老户"]){l='蓝色预警';a='常规关注，轨迹留存';}
+
+  // 马尔可夫链 + 指数衰减概率预测
+  // 理论依据：泊松过程的指数分布间隔模型 P(X<=t)=1-e^(-λt)
+  let p7=0,p30=0;
+  const lambda = bT > 0 ? 90 / (bT * 1.5) : 365;
+  if(bT>0){
+    const f=1-Math.exp(-bT/90);
+    p7=Math.round(f*(1-Math.exp(-7/lambda))*1000)/10;
+    p30=Math.round(f*(1-Math.exp(-30/lambda))*1000)/10;
+  }
+  if(t["违规上访"]){p7=Math.min(95,p7*1.8);p30=Math.min(99,p30*1.5);}
+  if(t["扬言极端"]||t["携带危险物品"]){p7=Math.min(98,p7*2);p30=Math.min(99.9,p30*1.8);}
+  if(t["缠访闹访"]||t["信访老户"]){p7=Math.min(95,p7*1.4);p30=Math.min(98,p30*1.3);}
+  if(t["涉军退役"]){p7=Math.min(90,p7*1.2);p30=Math.min(95,p30*1.15);}
+  p7=Math.round(p7*10)/10;p30=Math.round(p30*10)/10;
+
+  // 重力模型目的地预测
+  // 理论依据：P_i = (A_i * M_i) / Σ(A_j * M_j)
+  const destProb={};
+  let bjProb=0;
+  if(t["进京上访"])bjProb+=45;
+  if(bT>0)bjProb+=Math.min(30,bT*10);
+  if(t["多次进京"])bjProb+=20;
+  if(t["到部初访"])bjProb+=15;
+  if(t["违规上访"])bjProb+=10;
+  if(t["扬言极端"]||t["境外背景"])bjProb+=20;
+  if(t["涉军退役"])bjProb+=10;
+  if(t["缠访闹访"])bjProb+=12;
+  destProb["国家信访局(北京)"]=Math.min(95,bjProb);
+  let spProb=0;
+  if(t["到省厅上访"])spProb+=50;
+  if(t["到省初访"])spProb+=20;
+  if(t["涉诉信访"]||t["涉法涉诉"])spProb+=15;
+  if(t["涉征拆迁"])spProb+=15;
+  destProb["省信访局"]=Math.min(90,spProb);
+  let scProb=0;
+  if(t["到市局上访"])scProb+=55;
+  if(t["劳动社保"]||t["物业纠纷"]||t["邻里纠纷"])scProb+=20;
+  destProb["市信访局"]=Math.min(85,scProb);
+  if(t["涉军退役"])destProb["退役军人事务部"]=35;
+  if(t["金融投资"])destProb["金融监管部门"]=25;
+  if(t["环保问题"])destProb["环保部门"]=20;
+  if(t["医患纠纷"])destProb["卫健部门"]=22;
+  if(t["教育问题"])destProb["教育部门"]=18;
+  const sortedDest=Object.entries(destProb).sort((a,b)=>b[1]-a[1]);
+  const topDest=sortedDest[0]||["无",0];
+
+  // 路径规划数据
+  const originCity=getOriginCityName(p);
+  const routeData=generateRoutePlan(originCity, sortedDest, p);
+
+  return{
+    level:l,action:a,
+    p7,p30,
+    dest:topDest[0],dp:topDest[1],
+    bjT:bT,
+    routeList:sortedDest.filter(d=>d[1]>10).slice(0,4),
+    allDest:destProb,
+    routeData:routeData,
+    originCity:originCity,
+    confidence:bT>2?"高":bT>0?"中":"低",
+    factors:getPredictFactors(p,t,bT)
+  };
+}
+
+function getOriginCityName(p){
+  const addr=p.address||"";
+  for(const city of Object.keys(CITY_COORDS_GEO)){
+    if(addr.includes(city)&&city.length<=3)return city;
+  }
+  const id=p.idCard||p.name||"";
+  let hash=0;for(let i=0;i<Math.min(id.length,6);i++)hash=((hash<<5)-hash+id.charCodeAt(i))|0;
+  const cities=["成都","武汉","西安","广州","沈阳","郑州","济南","南京","杭州","长沙","合肥","南昌","福州","贵阳","昆明","兰州","太原","石家庄"];
+  const idx=Math.abs(hash)%cities.length;
+  return cities[idx];
+}
+
+function generateRoutePlan(origin, dests, p){
+  const routes=[];
+  const originCoord=CITY_COORDS_GEO[origin]||[116.4, 39.9];
+  const t=p.tags;
+  const bT=p.bjT+p.bjF;
+  let transportMode="高铁";
+  if(t["进京航班记录"]&&bT>0)transportMode="飞机";
+  else if(t["进京火车记录"])transportMode="火车";
+  else if(bT===0)transportMode="长途汽车";
+  dests.forEach((d,idx)=>{
+    if(d[1]<=10)return;
+    const destName=d[0];
+    let destCoord=CITY_COORDS_GEO["北京"];
+    if(destName.includes("省信访局"))destCoord=CITY_COORDS_GEO["济南"]||[117.0, 36.68];
+    else if(destName.includes("市信访局"))destCoord=originCoord;
+    else if(destName.includes("退役军人"))destCoord=[116.35, 39.92];
+    else destCoord=CITY_COORDS_GEO["北京"]||[116.4, 39.9];
+    // Haversine简化距离计算
+    const dx=(destCoord[0]-originCoord[0])*111*Math.cos(Math.PI/180*(originCoord[1]+destCoord[1])/2);
+    const dy=(destCoord[1]-originCoord[1])*111;
+    const distKm=Math.round(Math.sqrt(dx*dx+dy*dy));
+    let estHours=0;
+    if(transportMode==="飞机")estHours=Math.max(1.5,distKm/700);
+    else if(transportMode==="高铁")estHours=Math.max(2,distKm/250);
+    else if(transportMode==="火车")estHours=Math.max(4,distKm/100);
+    else estHours=Math.max(6,distKm/60);
+    const waypoints=findWaypointsGeo(originCoord, destCoord, transportMode);
+    routes.push({
+      rank:idx+1,
+      destination:destName,
+      probability:d[1],
+      origin:origin,
+      originCoord:originCoord,
+      destCoord:destCoord,
+      distance:distKm,
+      transport:transportMode,
+      estHours:Math.round(estHours*10)/10,
+      waypoints:waypoints,
+      curvePoints:generateCurvePointsGeo(originCoord, destCoord, idx),
+      riskLevel:d[1]>70?"高":d[1]>40?"中":"低"
+    });
+  });
+  return routes;
+}
+
+function findWaypointsGeo(origin, dest, mode){
+  const waypoints=[];
+  const steps=mode==="飞机"?1:mode==="高铁"?3:2;
+  for(let i=1;i<=steps;i++){
+    const ratio=i/(steps+1);
+    const lng=origin[0]+(dest[0]-origin[0])*ratio;
+    const lat=origin[1]+(dest[1]-origin[1])*ratio + (ratio-0.5)*0.5;
+    waypoints.push([Math.round(lng*100)/100, Math.round(lat*100)/100]);
+  }
+  return waypoints;
+}
+
+function generateCurvePointsGeo(origin, dest, idx){
+  const midLng=(origin[0]+dest[0])/2;
+  const midLat=Math.min(origin[1],dest[1]) - 0.5 - (idx%4)*0.3 - (idx%2)*0.2;
+  const cp1Lng=origin[0]+(midLng-origin[0])*0.5;
+  const cp1Lat=origin[1]+(midLat-origin[1])*0.8;
+  const cp2Lng=dest[0]+(midLng-dest[0])*0.5;
+  const cp2Lat=dest[1]+(midLat-dest[1])*0.8;
+  return {
+    start:[origin[0],origin[1]],
+    cp1:[Math.round(cp1Lng*100)/100, Math.round(cp1Lat*100)/100],
+    cp2:[Math.round(cp2Lng*100)/100, Math.round(cp2Lat*100)/100],
+    end:[dest[0],dest[1]],
+    mid:[Math.round(midLng*100)/100, Math.round(midLat*100)/100]
+  };
+}
+
+function findWaypoints(origin, dest, mode){
+  const waypoints=[];
+  const steps=mode==="飞机"?1:mode==="高铁"?3:2;
+  for(let i=1;i<=steps;i++){
+    const ratio=i/(steps+1);
+    const x=origin[0]+(dest[0]-origin[0])*ratio;
+    const y=origin[1]+(dest[1]-origin[1])*ratio + (Math.random()-0.5)*20;
+    waypoints.push([Math.round(x),Math.round(y)]);
+  }
+  return waypoints;
+}
+
+function generateCurvePoints(origin, dest, idx){
+  const midX=(origin[0]+dest[0])/2;
+  const midY=Math.min(origin[1],dest[1]) - 30 - (idx%4)*20 - Math.random()*15;
+  const cp1x=origin[0]+(midX-origin[0])*0.5;
+  const cp1y=origin[1]+(midY-origin[1])*0.8;
+  const cp2x=dest[0]+(midX-dest[0])*0.5;
+  const cp2y=dest[1]+(midY-dest[1])*0.8;
+  return {start:origin,cp1:[cp1x,cp1y],cp2:[cp2x,cp2y],end:dest,mid:[midX,midY]};
+}
+
+function getPredictFactors(p,t,bT){
+  const factors=[];
+  if(bT>0)factors.push({name:"历史进京记录",value:bT+"次",weight:30});
+  if(t["进京上访"])factors.push({name:"进京上访标签",value:"是",weight:20});
+  if(t["违规上访"])factors.push({name:"违规上访行为",value:"是",weight:15});
+  if(t["缠访闹访"])factors.push({name:"缠访闹访",value:"是",weight:12});
+  if(t["扬言极端"])factors.push({name:"极端言行倾向",value:"是",weight:18});
+  if(t["多次进京"])factors.push({name:"多次进京",value:"是",weight:15});
+  if(p.score>=40)factors.push({name:"风险评分",value:p.score+"分",weight:10});
+  if(t["涉军退役"])factors.push({name:"涉军退役",value:"是",weight:8});
+  if(factors.length===0)factors.push({name:"基础风险评估",value:"常规",weight:5});
+  return factors.sort((a,b)=>b.weight-a.weight);
+}
+
+function showDashboard(){
+  document.getElementById('uploadZone').style.display='none';
+  document.getElementById('tabs').style.display='flex';
+  document.getElementById('personCount').textContent=`已分析 ${persons.length} 人`;
+  switchTab('collect');renderAll();
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.module').forEach(m=>m.classList.remove('active'));
+  const tm={collect:0,portrait:1,classify:2,warning:3,update:4};
+  const ts=document.querySelectorAll('.tab');if(ts[tm[tab]])ts[tm[tab]].classList.add('active');
+  const m=document.getElementById('mod'+tab.charAt(0).toUpperCase()+tab.slice(1));if(m)m.classList.add('active');
+  Object.values(chartInstances).forEach(c=>c&&c.dispose&&c.dispose());chartInstances={};
+  if(tab==='portrait')setTimeout(()=>{chartInstances.risk=renderPie('riskChart',getLevelCounts());},50);
+  if(tab==='classify')setTimeout(()=>{chartInstances.classify=renderBar('classifyChart',getLevelCounts());},50);
+  if(tab==='warning'){
+    setTimeout(function(){
+      try{
+        chartInstances.warn=renderPie('warningChart',getWarnCounts());
+        renderPredStats();
+      }catch(e){console.warn('预警图表渲染失败:',e);}
+    },50);
+    setTimeout(function(){
+      try{
+        renderMap();
+        _routeAnimPlaying = true;
+        const animBtn = document.getElementById('animBtn');
+        if(animBtn) animBtn.textContent = '⏸ 暂停播放';
+        // 关键：延迟resize确保容器尺寸已更新
+        setTimeout(function(){
+          try{
+            if(_routeMapChart) _routeMapChart.resize();
+          }catch(e){}
+        },200);
+      }catch(e){
+        console.warn('地图渲染失败:',e);
+        const svg = document.getElementById('chinaMap');
+        if(svg) svg.style.display = 'block';
+      }
+    }, 300);
+  }
+}
+
+function renderAll(){try{renderCollect();renderPortraitStats();renderPersonGrid();renderTagHits();renderWeights();renderControl();renderWarnings();renderAnomalies();renderUpdateForm();renderPredStats();}catch(e){console.error("renderAll error:",e);}}
+
+
+// ============ 真实离线地图数据 ============
+// ============ SVG地图路径数据（回退方案） ============
+const PROVINCE_PATHS = {"黑龙江": "M 659,34 L 777,34 L 836,119 L 810,170 L 777,196 L 725,205 L 685,179 L 659,136 L 633,93 L 653,42 L 659,34 Z", "吉林": "M 685,158 L 790,162 L 783,213 L 751,239 L 705,247 L 679,222 L 685,158 Z", "辽宁": "M 633,222 L 712,205 L 744,239 L 718,273 L 666,282 L 640,256 L 633,222 Z", "内蒙古": "M 339,85 L 483,93 L 600,136 L 640,179 L 666,222 L 613,264 L 548,239 L 522,213 L 463,256 L 430,290 L 378,282 L 345,230 L 313,196 L 339,128 L 339,85 Z", "新疆": "M 32,111 L 215,107 L 332,148 L 326,222 L 287,282 L 208,324 L 143,333 L 103,307 L 51,316 L 38,273 L 32,111 Z", "西藏": "M 97,324 L 195,324 L 273,350 L 358,418 L 332,470 L 247,478 L 143,436 L 97,384 L 97,324 Z", "青海": "M 241,290 L 332,282 L 411,307 L 417,367 L 372,401 L 313,410 L 247,376 L 241,290 Z", "甘肃": "M 280,217 L 391,239 L 450,273 L 489,316 L 457,350 L 437,376 L 391,393 L 352,359 L 306,290 L 280,217 Z", "四川": "M 345,367 L 443,359 L 489,376 L 496,427 L 470,478 L 437,495 L 398,478 L 358,487 L 345,436 L 345,367 Z", "云南": "M 345,461 L 398,461 L 443,478 L 457,521 L 437,564 L 398,581 L 358,555 L 345,512 L 345,461 Z", "广西": "M 437,512 L 476,504 L 528,530 L 535,581 L 502,598 L 463,581 L 437,547 L 437,512 Z", "广东": "M 502,547 L 555,530 L 600,547 L 607,581 L 574,607 L 535,589 L 502,564 L 502,547 Z", "福建": "M 594,470 L 646,478 L 640,530 L 620,555 L 594,547 L 587,512 L 594,470 Z", "浙江": "M 620,418 L 666,410 L 679,444 L 659,478 L 633,487 L 613,461 L 620,418 Z", "江苏": "M 594,350 L 659,350 L 666,393 L 646,418 L 620,418 L 594,393 L 594,350 Z", "山东": "M 572,290 L 672,299 L 676,333 L 653,359 L 613,359 L 581,333 L 572,290 Z", "河北": "M 555,222 L 633,222 L 637,282 L 600,307 L 561,324 L 548,290 L 555,222 Z", "北京": "M 581,247 L 607,247 L 607,273 L 581,273 L 581,247 Z", "天津": "M 598,261 L 613,261 L 613,285 L 598,285 L 598,261 Z", "山西": "M 515,256 L 568,256 L 561,307 L 535,341 L 515,350 L 509,307 L 515,256 Z", "陕西": "M 450,273 L 522,273 L 528,324 L 515,367 L 483,393 L 457,393 L 443,359 L 450,273 Z", "河南": "M 515,324 L 594,324 L 587,376 L 561,410 L 522,393 L 515,359 L 515,324 Z", "湖北": "M 489,376 L 587,376 L 594,436 L 561,453 L 522,444 L 489,418 L 489,376 Z", "湖南": "M 489,436 L 568,436 L 561,512 L 535,530 L 496,512 L 489,470 L 489,436 Z", "江西": "M 555,436 L 620,436 L 613,504 L 587,530 L 555,512 L 555,436 Z", "安徽": "M 572,359 L 633,359 L 627,410 L 600,444 L 572,436 L 572,359 Z", "贵州": "M 424,453 L 502,453 L 496,512 L 463,530 L 424,512 L 424,453 Z", "海南": "M 489,603 L 522,603 L 522,637 L 489,637 L 489,603 Z", "台湾": "M 640,516 L 666,516 L 659,574 L 640,567 L 640,516 Z", "上海": "M 653,410 L 668,410 L 668,424 L 653,424 L 653,410 Z", "重庆": "M 450,401 L 509,401 L 509,470 L 450,470 L 450,401 Z", "宁夏": "M 430,273 L 476,273 L 470,324 L 437,341 L 430,273 Z", "香港": "M 559,562 L 566,562 L 566,569 L 559,569 L 559,562 Z", "澳门": "M 555,569 L 556,569 L 556,571 L 555,571 L 555,569 Z"};
+const CHINA_PATH = "M 836,119 L 810,170 L 777,196 L 783,213 L 751,239 L 718,273 L 676,333 L 672,299 L 666,410 L 659,478 L 646,478 L 640,530 L 620,555 L 607,581 L 600,547 L 574,607 L 535,589 L 535,581 L 528,530 L 502,598 L 463,581 L 437,564 L 457,521 L 443,478 L 398,461 L 358,487 L 345,461 L 345,367 L 358,487 L 345,367 L 280,217 L 332,148 L 215,107 L 32,111 L 38,273 L 51,316 L 103,307 L 143,333 L 208,324 L 287,282 L 326,222 L 332,148 L 339,85 L 339,128 L 313,196 L 345,230 L 378,282 L 430,290 L 463,256 L 522,213 L 548,239 L 613,264 L 666,222 L 640,179 L 600,136 L 483,93 L 339,85 Z";
+
+// ============ 真实离线地图数据 ============
+// ============ 地图数据 ============
+// 优先使用从china_geo_data.js加载的真实省界数据
+const PROVINCE_NAME_MAP = {
+  "北京市":"北京","天津市":"天津","河北省":"河北","山西省":"山西","内蒙古自治区":"内蒙古",
+  "辽宁省":"辽宁","吉林省":"吉林","黑龙江省":"黑龙江","上海市":"上海","江苏省":"江苏",
+  "浙江省":"浙江","安徽省":"安徽","福建省":"福建","江西省":"江西","山东省":"山东",
+  "河南省":"河南","湖北省":"湖北","湖南省":"湖南","广东省":"广东","广西壮族自治区":"广西",
+  "海南省":"海南","重庆市":"重庆","四川省":"四川","贵州省":"贵州","云南省":"云南",
+  "西藏自治区":"西藏","陕西省":"陕西","甘肃省":"甘肃","青海省":"青海","宁夏回族自治区":"宁夏",
+  "新疆维吾尔自治区":"新疆","台湾省":"台湾","香港特别行政区":"香港","澳门特别行政区":"澳门"
+};
+
+// 处理真实GeoJSON：将省份全称转为简称
+function getChinaGeoJSON(){
+  if(typeof CHINA_GEOJSON_REAL !== 'undefined' && CHINA_GEOJSON_REAL && CHINA_GEOJSON_REAL.features){
+    // 复制一份，将省份名转为简称
+    var data = JSON.parse(JSON.stringify(CHINA_GEOJSON_REAL));
+    data.features.forEach(function(f){
+      var fullName = f.properties.name;
+      if(PROVINCE_NAME_MAP[fullName]){
+        f.properties.name = PROVINCE_NAME_MAP[fullName];
+      }
+    });
+    return data;
+  }
+  // 回退：简化数据
+  return {"type":"FeatureCollection","features":[]};
+}
+
+const CHINA_GEOJSON = getChinaGeoJSON();
+const CITY_COORDS_GEO = {"北京": [116.4074, 39.9042], "上海": [121.4737, 31.2304], "广州": [113.2644, 23.1291], "深圳": [114.0579, 22.5431], "成都": [104.0668, 30.5728], "重庆": [106.5516, 29.563], "武汉": [114.3054, 30.5931], "西安": [108.948, 34.2632], "杭州": [120.1551, 30.2741], "南京": [118.7969, 32.0603], "郑州": [113.6254, 34.7466], "济南": [117.0009, 36.6758], "沈阳": [123.4291, 41.7968], "长春": [125.3245, 43.8868], "哈尔滨": [126.5349, 45.8038], "石家庄": [114.5025, 38.0455], "太原": [112.5492, 37.857], "合肥": [117.2272, 31.8206], "福州": [119.2965, 26.0745], "南昌": [115.8922, 28.6765], "长沙": [112.9388, 28.2282], "南宁": [108.3669, 22.8172], "海口": [110.1999, 20.044], "贵阳": [106.7135, 26.5783], "昆明": [102.7123, 25.0406], "拉萨": [91.1322, 29.6604], "兰州": [103.8236, 36.0581], "西宁": [101.7782, 36.6232], "银川": [106.2325, 38.4872], "乌鲁木齐": [87.6177, 43.7928], "呼和浩特": [111.7519, 40.8414], "天津": [117.1902, 39.1256], "青岛": [120.3826, 36.0671], "大连": [121.6186, 38.914], "厦门": [118.0894, 24.4798], "宁波": [121.5499, 29.8684], "温州": [120.6724, 28.0005], "苏州": [120.5853, 31.299], "无锡": [120.3017, 31.4912], "徐州": [117.1855, 34.2055], "洛阳": [112.4345, 34.6628], "襄阳": [112.1225, 32.0158], "烟台": [121.3918, 37.5392], "泉州": [118.6757, 24.874], "东莞": [113.7463, 23.0487], "佛山": [113.122, 23.0218], "桂林": [110.29, 25.27], "三亚": [109.5082, 18.2479]};
+const ROUTE_COLORS = {"红色":"#ff4d4f","橙色":"#ff8c42","黄色":"#ffcc44","蓝色":"#36c667"};
+
+// 经纬度转SVG坐标（简化墨卡托投影）
+function geoToSvg(lng, lat){
+  const x = ((lng - 73) / 65) * 850 + 25;
+  const y = ((54 - lat) / 38) * 650 + 25;
+  return [Math.round(x), Math.round(y)];
+}
+
+// SVG坐标转经纬度
+function svgToGeo(x, y){
+  const lng = (x - 25) / 850 * 65 + 73;
+  const lat = 54 - (y - 25) / 650 * 38;
+  return [Math.round(lng*100)/100, Math.round(lat*100)/100];
+}
+
+let _routeMapChart = null;
+let _mapMode = 'svg'; // 'echarts' 或 'svg'
+let _routeAnimPlaying = true;
+let _mapView='national',_routeAnimTimer=null,_animDots=[],_drawAnimRAF=null;
+let _selectedPerson=null; // 当前选中的人员
+
+function renderMap(){
+  const warnPersons = persons.filter(p=>p.warn&&p.warn.level&&p.warn.level!=='无预警'&&p.warn.level!=='' ).slice(0,80);
+  const infoEl = document.getElementById('mapInfoText');
+  if(infoEl) infoEl.textContent = '共'+warnPersons.length+'条上访路径';
+
+  // 优先尝试ECharts模式
+  if(typeof echarts!=='undefined' && CHINA_GEOJSON && CHINA_GEOJSON.features){
+    try{
+      const chartEl = document.getElementById('routeMapChart');
+      const svgEl = document.getElementById('chinaMap');
+      if(chartEl){chartEl.style.display='block';chartEl.style.width='100%';chartEl.style.height='100%';}
+      if(svgEl) svgEl.style.display = 'none';
+      renderMapECharts(warnPersons);
+      _mapMode = 'echarts';
+      if(_routeMapChart){setTimeout(function(){try{_routeMapChart.resize();}catch(e){}},50);}
+      return;
+    }catch(e){
+      console.warn('ECharts地图加载失败，回退到SVG模式:', e);
+    }
+  }
+
+  // SVG回退模式
+  _mapMode = 'svg';
+  const svg = document.getElementById('chinaMap');
+  const chart = document.getElementById('routeMapChart');
+  if(svg) svg.style.display = 'block';
+  if(chart) chart.style.display = 'none';
+  renderMapSVG(warnPersons);
+}
+
+// ===== ECharts地图模式 =====
+function renderMapECharts(warnPersons){
+  const chartDom = document.getElementById('routeMapChart');
+  if(!chartDom) throw new Error('找不到routeMapChart元素');
+
+  if(_routeMapChart){try{_routeMapChart.dispose();}catch(e){} _routeMapChart=null;}
+  _routeMapChart = echarts.init(chartDom);
+
+  // 注册地图（带错误捕获）
+  try{
+    echarts.registerMap('china', CHINA_GEOJSON);
+  }catch(e){
+    throw new Error('地图注册失败: ' + e.message);
+  }
+
+  // 构建路径数据
+  const series = [];
+  const levelOrder = ["蓝色","黄色","橙色","红色"];
+  const cityPoints = {};
+  const beijingCoord = [116.4074, 39.9042];
+
+  const groups = {"红色":[], "橙色":[], "黄色":[], "蓝色":[]};
+
+  warnPersons.forEach((p, idx)=>{
+    const level = p.level;
+    if(!groups[level]) groups[level] = [];
+    let originName = p.warn.originCity || getOriginCityName(p);
+    let originCoord = CITY_COORDS_GEO[originName];
+    if(!originCoord){
+      const fallback = ["成都","武汉","西安","广州","沈阳","郑州","济南","南京","杭州","长沙","合肥","南昌","福州","贵阳","昆明","兰州","太原","石家庄"];
+      const h = (idx * 7 + 3) % fallback.length;
+      originName = fallback[h];
+      originCoord = CITY_COORDS_GEO[originName] || [110, 35];
+    }
+
+    const destName = p.warn.dest || '国家信访局(北京)';
+    let destCoord = beijingCoord;
+    if(destName.includes('省信访局')) destCoord = CITY_COORDS_GEO['济南'] || [117.0, 36.68];
+    else if(destName.includes('市信访局')) destCoord = originCoord;
+
+    groups[level].push({
+      coords: [originCoord, destCoord],
+      fromName: originName,
+      toName: destName.replace(/[()（）北京]/g,''),
+      value: p.warn.dp || 50,
+      personName: p.name,
+      score: p.score,
+      p7: p.warn.p7,
+      p30: p.warn.p30,
+      level: level,
+      transport: (p.warn.routeData&&p.warn.routeData[0])?p.warn.routeData[0].transport:'高铁',
+      distance: (p.warn.routeData&&p.warn.routeData[0])?p.warn.routeData[0].distance:0
+    });
+
+    if(!cityPoints[originName]){
+      cityPoints[originName] = {name:originName, value:[originCoord[0], originCoord[1], 1]};
+    }else{
+      cityPoints[originName].value[2] += 1;
+    }
+  });
+
+  levelOrder.forEach(level=>{
+    const routes = groups[level] || [];
+    if(!routes.length) return;
+    const color = ROUTE_COLORS[level];
+    series.push({
+      name: level+'预警',
+      type: 'lines',
+      zlevel: 2,
+      effect: {
+        show: _routeAnimPlaying,
+        period: 6,
+        trailLength: 0.3,
+        symbol: 'arrow',
+        symbolSize: 6,
+        color: color
+      },
+      lineStyle: {
+        color: color,
+        width: level==='红色'?2.5:level==='橙色'?2:level==='黄色'?1.5:1,
+        opacity: level==='红色'?0.8:level==='橙色'?0.65:level==='黄色'?0.5:0.35,
+        curveness: 0.25
+      },
+      data: routes
+    });
+  });
+
+  // 起点城市散点
+  const scatterData = Object.values(cityPoints).map(c=>({name:c.name, value:c.value}));
+  series.push({
+    name: '出发城市',
+    type: 'effectScatter',
+    coordinateSystem: 'geo',
+    zlevel: 3,
+    rippleEffect: {brushType:'stroke', scale:4, period:4},
+    symbolSize: function(val){ return Math.max(6, Math.min(18, val[2]*2+4)); },
+    itemStyle: {color:'#ff8c42', shadowBlur:10, shadowColor:'#ff8c42'},
+    label: {show:true, position:'right', formatter:'{b}', color:'#ffcc44', fontSize:11, fontWeight:'bold'},
+    data: scatterData
+  });
+
+  // 北京终点
+  series.push({
+    name: '北京终点',
+    type: 'effectScatter',
+    coordinateSystem: 'geo',
+    zlevel: 4,
+    rippleEffect: {brushType:'fill', scale:6, period:3},
+    symbolSize: 18,
+    itemStyle: {color:'#ff4d4f', shadowBlur:20, shadowColor:'#ff4d4f'},
+    label: {show:true, position:'top', formatter:'北京', color:'#ff4d4f', fontSize:13, fontWeight:'bold'},
+    data: [{name:'国家信访局', value:[116.4074, 39.9042, 100]}]
+  });
+
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(7,14,29,.95)',
+      borderColor: 'rgba(80,150,255,.4)',
+      borderWidth: 1,
+      textStyle: {color:'#f0f4ff', fontSize:12},
+      formatter: function(params){
+        if(params.seriesType==='lines' && params.data){
+          const d = params.data;
+          const color = ROUTE_COLORS[d.level] || '#36c667';
+          return '<div style="font-weight:bold;color:'+color+';margin-bottom:4px">'+d.personName+'</div>'+
+            '<div style="font-size:11px;color:#8ea8d0;line-height:1.6">'+
+            '出发: '+d.fromName+'<br>目的: '+d.toName+'<br>'+
+            '等级: <span style="color:'+color+'">'+d.level+'级</span><br>'+
+            '得分: '+d.score+'分<br>'+
+            '7天: <b>'+d.p7+'%</b> · 30天: <b>'+d.p30+'%</b><br>'+
+            '交通: '+d.transport+' · '+d.distance+'km</div>';
+        }else if(params.seriesType==='effectScatter'){
+          return '<b>'+params.name+'</b><br>人数: '+(params.value&&params.value[2]?params.value[2]:0)+'人';
+        }
+        return params.name || '';
+      }
+    },
+    geo: {
+      map: 'china',
+      roam: true,
+      zoom: 1.2,
+      center: [105, 36],
+      scaleLimit: {min: 0.8, max: 5},
+      itemStyle: {
+        areaColor: 'rgba(20,50,100,.2)',
+        borderColor: 'rgba(90,155,240,.35)',
+        borderWidth: 1,
+        shadowColor: 'rgba(56,116,200,.3)',
+        shadowBlur: 20
+      },
+      emphasis: {
+        itemStyle: {areaColor:'rgba(56,116,200,.3)', borderColor:'rgba(90,155,240,.8)'},
+        label: {show:false}
+      },
+      label: {show:false}
+    },
+    series: series
+  };
+
+  _routeMapChart.setOption(option);
+
+  // 点击事件
+  _routeMapChart.off('click');
+  _routeMapChart.on('click', function(params){
+    if(params.seriesType==='lines' && params.data && params.data.personName){
+      showRouteDetailByPerson(params.data.personName);
+    }
+  });
+}
+
+// ===== SVG地图模式（回退） =====
+function renderMapSVG(warnPersons){
+  const svg=document.getElementById('chinaMap');if(!svg)return;
+  const provLayer=document.getElementById('provinceLayer');
+  const transLayer=document.getElementById('transportLayer');
+  const mapPaths=document.getElementById('mapPaths');
+  const routeLines=document.getElementById('routeLines');
+  const cityDots=document.getElementById('cityDots');
+  const markers=document.getElementById('personMarkers');
+  const selLayer=document.getElementById('selectedRouteLayer');
+  if(!mapPaths||!routeLines||!cityDots||!markers)return;
+
+  if(_drawAnimRAF){cancelAnimationFrame(_drawAnimRAF);_drawAnimRAF=null;}
+  if(_routeAnimTimer){clearInterval(_routeAnimTimer);_routeAnimTimer=null;}
+  _animDots.forEach(d=>{try{d.remove&&d.remove();}catch(e){}});_animDots=[];
+  if(provLayer)provLayer.innerHTML='';
+  if(transLayer)transLayer.innerHTML='';
+  mapPaths.innerHTML='';routeLines.innerHTML='';cityDots.innerHTML='';markers.innerHTML='';
+  if(selLayer)selLayer.innerHTML='';
+
+  // 省份轮廓
+  if(provLayer&&typeof PROVINCE_PATHS!=='undefined'){
+    for(const [name,d] of Object.entries(PROVINCE_PATHS)){
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d',d);p.setAttribute('fill','rgba(60,120,200,.06)');
+      p.setAttribute('stroke','rgba(90,155,240,.25)');p.setAttribute('stroke-width','0.8');
+      p.setAttribute('class','prov-path');p.dataset.name=name;
+      provLayer.appendChild(p);
+    }
+  }
+
+  // 中国轮廓
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d',CHINA_PATH);
+  path.setAttribute('fill','rgba(20,50,100,.12)');
+  path.setAttribute('stroke','rgba(90,155,240,.5)');
+  path.setAttribute('stroke-width','1.2');
+  path.setAttribute('filter','url(#glow)');
+  mapPaths.appendChild(path);
+
+  // 主要城市
+  const keyCities=["北京","上海","广州","成都","武汉","西安","沈阳","乌鲁木齐","拉萨","哈尔滨","昆明","海口","郑州","济南","南京","杭州"];
+  keyCities.forEach(name=>{
+    const geo=CITY_COORDS_GEO[name];if(!geo)return;
+    const c=geoToSvg(geo[0],geo[1]);
+    const c2=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c2.setAttribute('cx',c[0]);c2.setAttribute('cy',c[1]);c2.setAttribute('r','3');
+    c2.setAttribute('fill','rgba(90,155,240,.6)');c2.setAttribute('stroke','rgba(90,155,240,.8)');c2.setAttribute('stroke-width','1');
+    cityDots.appendChild(c2);
+    const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+    tx.setAttribute('x',c[0]+6);tx.setAttribute('y',c[1]+4);
+    tx.setAttribute('fill','rgba(150,180,220,.7)');tx.setAttribute('font-size','10');
+    tx.textContent=name;cityDots.appendChild(tx);
+  });
+
+  // 路径绘制
+  const beijingGeo=CITY_COORDS_GEO["北京"];
+  const beijing=beijingGeo?geoToSvg(beijingGeo[0],beijingGeo[1]):[480,160];
+
+  warnPersons.forEach((p,i)=>{
+    const level=p.level;
+    const color=ROUTE_COLORS[level]||'#36c667';
+    const opacity=level==='红色'?0.7:level==='橙色'?0.55:level==='黄色'?0.4:0.3;
+    const width=level==='红色'?2.5:level==='橙色'?2:level==='黄色'?1.5:1;
+
+    // 起点
+    const originName=p.warn.originCity||getOriginCityName(p);
+    let originGeo=CITY_COORDS_GEO[originName];
+    if(!originGeo){
+      const fallback=["成都","武汉","西安","广州","沈阳","郑州","济南","南京","杭州","长沙","合肥","南昌","福州","贵阳","昆明","兰州","太原","石家庄"];
+      const h=(i*7+3)%fallback.length;
+      originGeo=CITY_COORDS_GEO[fallback[h]]||[110,35];
+    }
+    const origin=geoToSvg(originGeo[0], originGeo[1]);
+
+    // 贝塞尔曲线
+    const midX=(origin[0]+beijing[0])/2;
+    const midY=Math.min(origin[1],beijing[1])-30-(i%5)*15;
+    const d='M '+origin[0]+','+origin[1]+' Q '+midX+','+midY+' '+beijing[0]+','+beijing[1];
+
+    const line=document.createElementNS('http://www.w3.org/2000/svg','path');
+    line.setAttribute('d',d);line.setAttribute('fill','none');
+    line.setAttribute('stroke',color);line.setAttribute('stroke-width',width);
+    line.setAttribute('opacity',opacity);line.setAttribute('stroke-linecap','round');
+    line.style.cursor='pointer';
+
+    line.addEventListener('mouseenter',function(e){
+      const tt=document.getElementById('mapTooltip');
+      tt.innerHTML='<b style="color:'+color+'">'+escHtml(p.name)+'</b><br>等级: '+escHtml(p.level)+'级<br>得分: '+p.score+'分<br>7天: '+p.warn.p7+'% · 30天: '+p.warn.p30+'%';
+      tt.style.display='block';
+    });
+    line.addEventListener('mousemove',function(e){
+      const tt=document.getElementById('mapTooltip');
+      const rect=document.getElementById('mapContainer').getBoundingClientRect();
+      tt.style.left=(e.clientX-rect.left+12)+'px';
+      tt.style.top=(e.clientY-rect.top+12)+'px';
+    });
+    line.addEventListener('mouseleave',function(){document.getElementById('mapTooltip').style.display='none';});
+    line.addEventListener('click',function(){showRouteDetailByPerson(p.name);});
+
+    routeLines.appendChild(line);
+
+    if(i<60){
+      const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx',origin[0]);dot.setAttribute('cy',origin[1]);
+      dot.setAttribute('r',4);dot.setAttribute('fill',color);
+      dot.setAttribute('opacity',Math.min(1,opacity+0.3));
+      dot.setAttribute('stroke','#fff');dot.setAttribute('stroke-width','0.8');
+      markers.appendChild(dot);
+    }
+  });
+
+  // 北京终点
+  const bjPulse=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bjPulse.setAttribute('cx',beijing[0]);bjPulse.setAttribute('cy',beijing[1]);
+  bjPulse.setAttribute('r','10');bjPulse.setAttribute('fill','rgba(255,77,79,0)');
+  bjPulse.setAttribute('stroke','rgba(255,77,79,.8)');bjPulse.setAttribute('stroke-width','2');
+  markers.appendChild(bjPulse);
+  let pulseR=8,pulseDir=1;
+  function pulseAnim(){
+    pulseR+=pulseDir*0.15;
+    if(pulseR>=20)pulseDir=-1;if(pulseR<=8)pulseDir=1;
+    bjPulse.setAttribute('r',pulseR);bjPulse.setAttribute('opacity',1-(pulseR-8)/12);
+    requestAnimationFrame(pulseAnim);
+  }
+  pulseAnim();
+
+  const bjDot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bjDot.setAttribute('cx',beijing[0]);bjDot.setAttribute('cy',beijing[1]);
+  bjDot.setAttribute('r','5');bjDot.setAttribute('fill','#ff4d4f');bjDot.setAttribute('filter','url(#glow)');
+  markers.appendChild(bjDot);
+  const bjText=document.createElementNS('http://www.w3.org/2000/svg','text');
+  bjText.setAttribute('x',beijing[0]+10);bjText.setAttribute('y',beijing[1]+4);
+  bjText.setAttribute('fill','#ff4d4f');bjText.setAttribute('font-size','12');bjText.setAttribute('font-weight','600');
+  bjText.textContent='北京';markers.appendChild(bjText);
+}
+
+// 视图切换
+function setMapView(view, btn){
+  document.querySelectorAll('.utab').forEach(b=>{if(b.parentElement===btn.parentElement)b.classList.remove('active');});
+  btn.classList.add('active');
+
+  if(_mapMode==='echarts' && _routeMapChart){
+    if(view==='beijing'){
+      _routeMapChart.setOption({geo:{center:[116.4, 39.9], zoom:4.5}});
+    }else if(view==='province'){
+      _routeMapChart.setOption({geo:{center:[115, 37], zoom:2.5}});
+    }else{
+      _routeMapChart.setOption({geo:{center:[105, 36], zoom:1.2}});
+    }
+  }else{
+    const svg=document.getElementById('chinaMap');
+    if(!svg)return;
+    if(view==='beijing'){svg.setAttribute('viewBox','400,80 350 250');}
+    else if(view==='province'){svg.setAttribute('viewBox','300,150 400 350');}
+    else{svg.setAttribute('viewBox','0 0 900 700');}
+  }
+}
+
+// 播放/暂停
+function animateRoutes(){
+  const btn=document.getElementById('animBtn');
+  if(!btn)return;
+  _routeAnimPlaying = !_routeAnimPlaying;
+  btn.textContent = _routeAnimPlaying ? '⏸ 暂停播放' : '▶ 播放路径';
+
+  if(_mapMode==='echarts' && _routeMapChart){
+    const opt = _routeMapChart.getOption();
+    if(opt && opt.series){
+      opt.series.forEach(s=>{
+        if(s.type==='lines' && s.effect){
+          s.effect.show = _routeAnimPlaying;
+        }
+      });
+      _routeMapChart.setOption({series: opt.series});
+    }
+  }
+  // SVG模式的动画控制由CSS/RAF处理（此处简化）
+}
+
+// ============ 智能聚类分析 ============
+let _clusterType='level';
+
+function runCluster(type,btn){
+  if(!persons.length){
+    const cr=document.getElementById('clusterResult');
+    if(cr)cr.innerHTML='<div style="color:var(--text-3);text-align:center;padding:20px">暂无数据，请先上传文件</div>';
+    const cc=document.getElementById('clusterCount');
+    if(cc)cc.textContent='0';
+    return;
+  }
+  _clusterType=type;
+  // 更新按钮状态
+  const buttons=document.querySelectorAll('#modCollect .utab');
+  buttons.forEach(b=>{
+    if(b.textContent.includes('按风险等级')||b.textContent.includes('按地区')||b.textContent.includes('按标签')||b.textContent.includes('按数据源')){
+      b.classList.remove('active');
+    }
+  });
+  if(btn)btn.classList.add('active');
+  
+  let clusters={};
+  if(type==='level'){
+    // 按风险等级聚类
+    persons.forEach(p=>{
+      const lv=p.level||'未分级';
+      if(!clusters[lv])clusters[lv]={count:0,persons:[]};
+      clusters[lv].count++;
+      clusters[lv].persons.push(p);
+    });
+  }else if(type==='region'){
+    // 按地区聚类（优先身份证，其次地址，其次信访去向）
+    persons.forEach(p=>{
+      let region='未知地区';
+      if(p.idCard&&p.idCard.length>=6){
+        region=getRegionByCode(p.idCard.substring(0,6));
+      }else if(p.address){
+        region=extractProvince(p.address);
+      }else if(p.pDest){
+        region=extractProvince(p.pDest);
+      }
+      if(!clusters[region])clusters[region]={count:0,persons:[]};
+      clusters[region].count++;
+      clusters[region].persons.push(p);
+    });
+  }else if(type==='tags'){
+    // 按标签聚类（多标签人员归入最显著标签）
+    persons.forEach(p=>{
+      const tag=getTopTag(p);
+      if(!clusters[tag])clusters[tag]={count:0,persons:[]};
+      clusters[tag].count++;
+      clusters[tag].persons.push(p);
+    });
+  }else if(type==='source'){
+    // 按数据源聚类（一个人可能来自多个数据源，分别计入）
+    persons.forEach(p=>{
+      const srcs=Object.keys(p.srcs||{});
+      if(srcs.length===0){
+        if(!clusters['未知来源'])clusters['未知来源']={count:0,persons:[]};
+        clusters['未知来源'].count++;
+        clusters['未知来源'].persons.push(p);
+      }else{
+        srcs.forEach(src=>{
+          if(!clusters[src])clusters[src]={count:0,persons:[]};
+          clusters[src].count++;
+          clusters[src].persons.push(p);
+        });
+      }
+    });
+  }
+  
+  // 排序：按数量降序
+  const sorted=Object.entries(clusters).sort((a,b)=>b[1].count-a[1].count);
+  const total=persons.length;
+  
+  // 更新聚类数量
+  const cc=document.getElementById('clusterCount');
+  if(cc)cc.textContent=sorted.length+'类';
+  
+  // 渲染结果
+  const cr=document.getElementById('clusterResult');
+  if(!cr)return;
+  
+  let html='';
+  const levelColors={
+    '红色':'#ff4d4f','橙色':'#fa8c16','黄色':'#faad14','蓝色':'#1890ff',
+    '绿色':'#52c41a','紫色':'#722ed1','未分级':'#8c8c8c'
+  };
+  const defaultColor='#1890ff';
+  
+  sorted.forEach(([name,data],idx)=>{
+    const pct=((data.count/total)*100).toFixed(1);
+    const color=levelColors[name]||defaultColor;
+    const topNames=data.persons.slice(0,5).map(p=>p.name||'未知').join('、');
+    const moreCount=data.count-5;
+    html+=`
+      <div style="margin-bottom:8px;padding:8px 10px;background:rgba(30,60,100,.2);border-radius:4px;border-left:3px solid ${color};cursor:pointer" onclick="filterPersonsByCluster('${type}','${name.replace(/'/g,"\\'")}')">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-weight:600;color:${color}">${name}</span>
+          <span style="color:var(--text-3)">${data.count}人 · ${pct}%</span>
+        </div>
+        <div style="height:3px;background:rgba(255,255,255,.1);border-radius:2px;margin-bottom:5px">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-3)">${topNames}${moreCount>0?' 等'+moreCount+'人':''}</div>
+      </div>`;
+  });
+  
+  // 底部统计
+  html+=`<div style="margin-top:8px;padding:6px 10px;background:rgba(20,50,100,.15);border-radius:4px;font-size:10px;color:var(--text-3);text-align:center">
+    共 ${total} 人 · ${sorted.length} 个聚类 · 点击聚类可查看详情
+  </div>`;
+  
+  cr.innerHTML=html;
+}
+
+
+// 按聚类筛选人员（跳转到画像页）
+function filterPersonsByCluster(type,value){
+  if(!persons.length)return;
+  let filtered=[];
+  if(type==='level'){
+    filtered=persons.filter(p=>(p.level||'未分级')===value);
+  }else if(type==='region'){
+    filtered=persons.filter(p=>{
+      let r='未知地区';
+      if(p.idCard&&p.idCard.length>=6)r=getRegionByCode(p.idCard.substring(0,6));
+      else if(p.address)r=extractProvince(p.address);
+      else if(p.pDest)r=extractProvince(p.pDest);
+      return r===value;
+    });
+  }else if(type==='tags'){
+    filtered=persons.filter(p=>getTopTag(p)===value);
+  }else if(type==='source'){
+    filtered=persons.filter(p=>{
+      const srcs=Object.keys(p.srcs||{});
+      return srcs.includes(value)||(srcs.length===0&&value==='未知来源');
+    });
+  }
+  // 临时存储筛选结果，跳转到画像页展示
+  _clusterFiltered=filtered;
+  switchTab('portrait');
+  // 延迟后刷新人员网格（显示筛选结果）
+  setTimeout(function(){
+    const panel=document.getElementById('personGrid');
+    if(panel&&filtered.length){
+      // 简单提示
+      panel.scrollTop=0;
+    }
+  },100);
+}
+let _clusterFiltered=null;
+
+function getRegionByCode(code){
+  const map={
+    '1101':'北京','1100':'北京','1200':'天津','1300':'河北','1400':'山西','1500':'内蒙古',
+    '2100':'辽宁','2200':'吉林','2300':'黑龙江','3100':'上海','3200':'江苏',
+    '3300':'浙江','3400':'安徽','3500':'福建','3600':'江西','3700':'山东',
+    '4100':'河南','4200':'湖北','4300':'湖南','4400':'广东','4500':'广西',
+    '4600':'海南','5000':'重庆','5100':'四川','5200':'贵州','5300':'云南',
+    '5400':'西藏','6100':'陕西','6200':'甘肃','6300':'青海','6400':'宁夏',
+    '6500':'新疆','7100':'台湾','8100':'香港','8200':'澳门'
+  };
+  const prefix=code.substring(0,4);
+  const prefix2=code.substring(0,2)+'00';
+  return map[prefix]||map[prefix2]||'其他地区';
+}
+
+function extractProvince(addr){
+  const provinces=['北京','天津','河北','山西','内蒙古','辽宁','吉林','黑龙江','上海','江苏',
+    '浙江','安徽','福建','江西','山东','河南','湖北','湖南','广东','广西',
+    '海南','重庆','四川','贵州','云南','西藏','陕西','甘肃','青海','宁夏',
+    '新疆','台湾','香港','澳门'];
+  for(const p of provinces){
+    if(addr.includes(p))return p;
+  }
+  return '其他地区';
+}
+
+function getTopTag(p){
+  const tagPriority=['违规上访','进京上访','极端社会危害','有犯罪记录','扬言极端',
+    '自杀自残倾向','肇事肇祸精神病','精神病人','邪教','涉枪涉毒涉爆',
+    '串联煽动','网上炒作','集体访','缠访闹访','重复访','越级访',
+    '信访老户','多头访','涉警信访','无正当理由信访'];
+  const tags=p.tags||{};
+  for(const t of tagPriority){
+    if(tags[t])return t;
+  }
+  return '一般关注';
+}
+
+// ============ 数据导出中心 ============
+function exportData(type){
+  if(!persons.length){alert('暂无数据可导出，请先上传文件');return;}
+  
+  switch(type){
+    case 'portrait_xlsx':
+      exportPortraitXLSX();break;
+    case 'cluster_xlsx':
+      exportClusterXLSX();break;
+    case 'route_xlsx':
+      exportRouteXLSX();break;
+    case 'full_xlsx':
+      exportFullXLSX();break;
+    case 'portrait_json':
+      exportPortraitJSON();break;
+    case 'route_json':
+      exportRouteJSON();break;
+    default:
+      alert('未知导出类型');
+  }
+}
+
+function exportPortraitXLSX(){
+  const data=persons.map(p=>{
+    const tagList=Object.entries(p.tags||{}).filter(([k,v])=>v).map(([k,v])=>k).join('、');
+    const warn=p.warn||{};
+    return {
+      '姓名':p.name||'',
+      '身份证号':p.idCard||'',
+      '性别':p.gender||'',
+      '年龄':p.age||'',
+      '手机号':p.phone||'',
+      '户籍地':p.address||'',
+      '风险评分':p.score||0,
+      '风险等级':p.level||'',
+      '标签':tagList,
+      '信访次数':p.petitionCount||0,
+      '进京次数':(p.bjT||0)+(p.bjF||0),
+      '犯罪记录数':p.crimeCount||0,
+      '预警等级':warn.level||'',
+      '预测目的地':warn.dest||'',
+      '预测概率':(warn.dp||0)+'%',
+      '建议措施':warn.action||'',
+      '数据来源':Object.keys(p.srcs||{}).join('、')
+    };
+  });
+  
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'人员画像');
+  XLSX.writeFile(wb,'人员画像数据_'+getDateStr()+'.xlsx');
+}
+
+function exportClusterXLSX(){
+  // 重新计算当前类型的聚类
+  const type=_clusterType||'level';
+  let clusters={};
+  
+  persons.forEach(p=>{
+    let key='';
+    if(type==='level'){key=p.level||'未分级';}
+    else if(type==='region'){
+      key=p.idCard&&p.idCard.length>=6?getRegionByCode(p.idCard.substring(0,6)):(p.address?extractProvince(p.address):'未知');
+    }
+    else if(type==='tags'){key=getTopTag(p);}
+    else if(type==='source'){
+      const srcs=Object.keys(p.srcs||{});key=srcs.length?srcs[0]:'未知来源';
+    }
+    if(!clusters[key])clusters[key]={count:0,list:[]};
+    clusters[key].count++;
+    clusters[key].list.push(p);
+  });
+  
+  // 生成汇总表
+  const summary=Object.entries(clusters).sort((a,b)=>b[1].count-a[1].count).map(([name,data],idx)=>({
+    '序号':idx+1,
+    '聚类类别':name,
+    '人数':data.count,
+    '占比':((data.count/persons.length)*100).toFixed(1)+'%',
+    '代表人员':data.list.slice(0,5).map(p=>p.name||'').join('、')
+  }));
+  
+  // 生成明细表（每个聚类的所有人）
+  const details=[];
+  let idx=1;
+  Object.entries(clusters).sort((a,b)=>b[1].count-a[1].count).forEach(([name,data])=>{
+    data.list.forEach(p=>{
+      const tagList=Object.entries(p.tags||{}).filter(([k,v])=>v).map(([k,v])=>k).join('、');
+      details.push({
+        '序号':idx++,
+        '聚类类别':name,
+        '姓名':p.name||'',
+        '身份证号':p.idCard||'',
+        '风险等级':p.level||'',
+        '风险评分':p.score||0,
+        '标签':tagList
+      });
+    });
+  });
+  
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(summary),'聚类汇总');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(details),'聚类明细');
+  XLSX.writeFile(wb,'聚类分析数据_'+getDateStr()+'.xlsx');
+}
+
+function exportRouteXLSX(){
+  const warnPersons=persons.filter(p=>p.warn&&p.warn.level&&p.warn.level!=='无预警');
+  if(!warnPersons.length){alert('暂无路径预测数据');return;}
+  
+  const data=warnPersons.map(p=>{
+    const w=p.warn;
+    const traj=p.trajectory||[];
+    const trajStr=traj.map(t=>t.city+(t.date?'('+t.date+')':'')).join('→');
+    return {
+      '姓名':p.name||'',
+      '身份证号':p.idCard||'',
+      '风险等级':p.level||'',
+      '预警等级':w.level||'',
+      '预测目的地':w.dest||'',
+      '到达概率':(w.dp||0)+'%',
+      '7天内概率':(w.p7||0)+'%',
+      '30天内概率':(w.p30||0)+'%',
+      '预计天数':w.bjT||0,
+      '建议措施':w.action||'',
+      '历史路径':trajStr,
+      '路径节点数':traj.length
+    };
+  });
+  
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'路径预测');
+  XLSX.writeFile(wb,'路径预测数据_'+getDateStr()+'.xlsx');
+}
+
+function exportFullXLSX(){
+  // 全量导出：3个sheet
+  const wb=XLSX.utils.book_new();
+  
+  // Sheet1: 人员画像
+  const portraitData=persons.map(p=>{
+    const tagList=Object.entries(p.tags||{}).filter(([k,v])=>v).map(([k,v])=>k).join('、');
+    const warn=p.warn||{};
+    return {
+      '姓名':p.name||'','身份证号':p.idCard||'','性别':p.gender||'',
+      '年龄':p.age||'','手机号':p.phone||'','户籍地':p.address||'',
+      '风险评分':p.score||0,'风险等级':p.level||'','标签':tagList,
+      '信访次数':p.petitionCount||0,'进京火车次数':p.bjT||0,
+      '进京航班次数':p.bjF||0,'犯罪记录数':p.crimeCount||0,
+      '投诉次数':p.complaintCount||0,'预警等级':warn.level||'',
+      '预测目的地':warn.dest||'','预测概率':(warn.dp||0)+'%',
+      '7天概率':(warn.p7||0)+'%','30天概率':(warn.p30||0)+'%',
+      '预计天数':warn.bjT||0,'建议措施':warn.action||'',
+      '信访内容摘要':p.pContent||'','数据来源':Object.keys(p.srcs||{}).join('、')
+    };
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(portraitData),'人员画像');
+  
+  // Sheet2: 路径预测
+  const warnPersons=persons.filter(p=>p.warn&&p.warn.level&&p.warn.level!=='无预警');
+  const routeData=warnPersons.map(p=>{
+    const w=p.warn;const traj=p.trajectory||[];
+    return {
+      '姓名':p.name||'','身份证号':p.idCard||'','风险等级':p.level||'',
+      '预警等级':w.level||'','预测目的地':w.dest||'','到达概率':(w.dp||0)+'%',
+      '7天概率':(w.p7||0)+'%','30天概率':(w.p30||0)+'%',
+      '预计天数':w.bjT||0,'建议措施':w.action||'',
+      '历史路径':traj.map(t=>t.city).join('→')
+    };
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(routeData),'路径预测');
+  
+  // Sheet3: 原始数据明细
+  const rawData=[];
+  let ridx=1;
+  persons.forEach(p=>{
+    (p.rows||[]).forEach(r=>{
+      rawData.push({
+        '序号':ridx++,'姓名':p.name||'','身份证号':p.idCard||'',
+        '数据来源':r._src||'','文件':r._file||'','行号':r._row||'',
+        ...r
+      });
+    });
+  });
+  if(rawData.length>0){
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rawData),'原始数据明细');
+  }
+  
+  XLSX.writeFile(wb,'信访人员全量数据_'+getDateStr()+'.xlsx');
+}
+
+function exportPortraitJSON(){
+  const data=persons.map(p=>{
+    const tagList=Object.entries(p.tags||{}).filter(([k,v])=>v).map(([k,v])=>k);
+    return {
+      name:p.name||'',idCard:p.idCard||'',gender:p.gender||'',
+      age:p.age||'',phone:p.phone||'',address:p.address||'',
+      score:p.score||0,level:p.level||'',tags:tagList,
+      petitionCount:p.petitionCount||0,bjT:p.bjT||0,bjF:p.bjF||0,
+      crimeCount:p.crimeCount||0,warn:p.warn||null,
+      trajectory:p.trajectory||[],sources:Object.keys(p.srcs||{})
+    };
+  });
+  
+  const exportObj={
+    exportTime:new Date().toISOString(),
+    totalCount:persons.length,
+    dataSource:'信访人员画像分析系统',
+    persons:data
+  };
+  
+  downloadJSON(exportObj,'人员画像数据_'+getDateStr()+'.json');
+}
+
+function exportRouteJSON(){
+  const warnPersons=persons.filter(p=>p.warn&&p.warn.level&&p.warn.level!=='无预警');
+  if(!warnPersons.length){alert('暂无路径预测数据');return;}
+  
+  const data=warnPersons.map(p=>{
+    return {
+      name:p.name||'',idCard:p.idCard||'',level:p.level||'',
+      warn:p.warn||{},trajectory:p.trajectory||[]
+    };
+  });
+  
+  const exportObj={
+    exportTime:new Date().toISOString(),
+    totalCount:warnPersons.length,
+    dataSource:'信访人员画像分析系统-路径预测模块',
+    routes:data
+  };
+  
+  downloadJSON(exportObj,'路径预测数据_'+getDateStr()+'.json');
+}
+
+function getDateStr(){
+  const d=new Date();
+  return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+}
+
+function downloadJSON(obj,filename){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+// 旧的导出路径函数保留（兼容）
+function exportRouteData(){
+  const warnPersons=persons.filter(p=>p.warn&&p.warn.level!=='无预警');
+  if(!warnPersons.length){alert('暂无路径数据可导出');return;}
+  const exportData={
+    exportTime:new Date().toISOString(),
+    totalPersons:warnPersons.length,
+    predictionModel:{name:"上访路径预测模型V2.0",timeModel:"马尔可夫链+指数分布",destModel:"重力模型+贝叶斯修正",mapType:_mapMode==='echarts'?"ECharts GeoJSON地图":"SVG离线地图"},
+    routes:warnPersons.map(p=>({
+      name:p.name,idCard:p.idCard||'',address:p.address||'',
+      riskLevel:p.level,score:p.score,originCity:p.warn.originCity||'',
+      warning:{level:p.warn.level,action:p.warn.action,p7:p.warn.p7,p30:p.warn.p30,confidence:p.warn.confidence,topDest:p.warn.dest,topProb:p.warn.dp},
+      routePlan:p.warn.routeData||[]
+    }))
+  };
+  const blob=new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='上访路径预测数据_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();URL.revokeObjectURL(url);
+}
+
+// 预测统计
+function renderPredStats(){
+  const warnPersons=persons.filter(p=>p.warn&&p.warn.level!=='无预警');
+  const statsEl=document.getElementById('predStats');
+  if(!statsEl)return;
+  const highRisk=warnPersons.filter(p=>p.warn.p30>50).length;
+  const beijingBound=warnPersons.filter(p=>p.warn.dest&&p.warn.dest.includes('北京')).length;
+  const highConf=warnPersons.filter(p=>p.warn.confidence==='高').length;
+  statsEl.innerHTML=
+    '<div class="stat r"><span class="lbl">高风险</span><span class="val">'+highRisk+'</span></div>'+
+    '<div class="stat o"><span class="lbl">进京倾向</span><span class="val">'+beijingBound+'</span></div>'+
+    '<div class="stat y"><span class="lbl">高置信度</span><span class="val">'+highConf+'</span></div>'+
+    '<div class="stat g"><span class="lbl">预测总数</span><span class="val">'+warnPersons.length+'</span></div>';
+
+  const chartEl=document.getElementById('predChart');
+  if(chartEl&&typeof echarts!=='undefined'){
+    if(chartInstances.pred)chartInstances.pred.dispose();
+    const ch=echarts.init(chartEl);
+    const destCount={};
+    warnPersons.forEach(p=>{const dest=p.warn.dest||'未知';destCount[dest]=(destCount[dest]||0)+1;});
+    const sorted=Object.entries(destCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    ch.setOption({
+      tooltip:{trigger:'axis',backgroundColor:'rgba(7,14,29,.9)',borderColor:'rgba(56,116,200,.3)',textStyle:{color:'#f0f4ff',fontSize:11}},
+      grid:{left:'3%',right:'4%',top:'10%',bottom:'3%',containLabel:true},
+      xAxis:{type:'value',axisLine:{show:false},splitLine:{lineStyle:{color:'rgba(56,116,200,.08)'}},axisLabel:{color:'#50668a',fontSize:10}},
+      yAxis:{type:'category',data:sorted.map(function(d){return d[0].replace(/[()（）]/g,'').slice(0,8);}),axisLine:{show:false},axisLabel:{color:'#8ea8d0',fontSize:10}},
+      series:[{type:'bar',data:sorted.map(function(d){return {value:d[1],itemStyle:{color:d[1]>5?'#ff4d4f':d[1]>2?'#ff8c42':'#ffcc42'},borderRadius:[0,4,4,0]};}),barWidth:'55%',label:{show:true,position:'right',color:'#8ea8d0',fontSize:10,formatter:'{c}人'}}]
+    });
+    chartInstances.pred=ch;
+  }
+}
+
+// 路径详情
+function showRouteDetailByPerson(name){
+  const p=persons.find(x=>x.name===name);if(!p)return;
+  showRouteDetail(p);
+}
+
+function showRouteDetail(p){
+  _selectedPerson=p;
+  const card=document.getElementById('routeDetailCard');
+  const panel=document.getElementById('routeDetailPanel');
+  if(!card||!panel)return;
+  card.style.display='flex';
+  const w=p.warn;
+  const wc=ROUTE_COLORS[p.level]||'#36c667';
+
+  let h='';
+  h+='<div style="margin-bottom:10px">';
+  h+='<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:4px">'+escHtml(p.name||'未知')+'</div>';
+  h+='<div style="font-size:11px;color:var(--text-2)">风险等级: <span style="color:'+wc+';font-weight:600">'+p.level+'级</span> · '+p.score+'分</div>';
+  h+='</div>';
+
+  // 时间预测
+  h+='<div style="background:rgba(56,116,200,.08);border-radius:6px;padding:10px;margin-bottom:8px">';
+  h+='<div style="font-size:11px;color:var(--blue-l);font-weight:600;margin-bottom:8px">📅 上访时间预测（马尔可夫链模型）</div>';
+  h+='<div style="display:flex;gap:8px;text-align:center">';
+  h+='<div style="flex:1;background:rgba(255,77,79,.08);border-radius:4px;padding:6px 4px"><div style="font-size:10px;color:var(--text-3)">未来7天</div>';
+  h+='<div style="font-size:18px;font-weight:700;color:'+(w.p7>50?'#ff4d4f':w.p7>20?'#ff8c42':'#ffcc44')+'">'+w.p7+'%</div></div>';
+  h+='<div style="flex:1;background:rgba(255,140,66,.08);border-radius:4px;padding:6px 4px"><div style="font-size:10px;color:var(--text-3)">未来30天</div>';
+  h+='<div style="font-size:18px;font-weight:700;color:'+(w.p30>70?'#ff4d4f':w.p30>40?'#ff8c42':'#ffcc44')+'">'+w.p30+'%</div></div>';
+  h+='<div style="flex:1;background:rgba(56,116,200,.1);border-radius:4px;padding:6px 4px"><div style="font-size:10px;color:var(--text-3)">置信度</div>';
+  h+='<div style="font-size:18px;font-weight:700;color:var(--blue-l)">'+(w.confidence||'中')+'</div></div>';
+  h+='</div>';
+  h+='<div style="font-size:10px;color:var(--text-3);margin-top:6px;line-height:1.5">💡 基于历史进京'+w.bjT+'次记录，用指数分布模型推算再发概率</div>';
+  h+='</div>';
+
+  // 目的地预测
+  h+='<div style="background:rgba(255,140,66,.06);border-radius:6px;padding:10px;margin-bottom:8px">';
+  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-bottom:8px">🎯 目的地预测（重力模型）</div>';
+  const routes=w.routeData||[];
+  if(routes.length){
+    for(let i=0;i<Math.min(routes.length,3);i++){
+      const r=routes[i];
+      const barColor=r.probability>70?'#ff4d4f':r.probability>40?'#ff8c42':'#ffcc44';
+      const medal=i===0?'🥇':i===1?'🥈':'🥉';
+      h+='<div style="margin-bottom:8px">';
+      h+='<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">';
+      h+='<span style="color:var(--text-1);font-weight:'+(i===0?'600':'400')+'">'+medal+' '+escHtml(r.destination)+'</span>';
+      h+='<span style="color:'+barColor+';font-weight:700">'+r.probability+'%</span>';
+      h+='</div>';
+      h+='<div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">';
+      h+='<div style="height:100%;background:linear-gradient(90deg,'+barColor+',rgba(255,255,255,.3));width:'+r.probability+'%;border-radius:3px"></div>';
+      h+='</div>';
+      h+='<div style="font-size:10px;color:var(--text-3);margin-top:3px;display:flex;justify-content:space-between">';
+      h+='<span>🚄 '+r.transport+'</span><span>'+r.distance+'km</span><span>⏱ '+r.estHours+'h</span>';
+      h+='</div></div>';
+    }
+  }
+  h+='</div>';
+
+  // 预测依据
+  if(w.factors&&w.factors.length){
+    h+='<div style="background:rgba(54,198,103,.06);border-radius:6px;padding:10px;margin-bottom:8px">';
+    h+='<div style="font-size:11px;color:var(--green);font-weight:600;margin-bottom:6px">📊 预测依据因子</div>';
+    for(let i=0;i<Math.min(w.factors.length,5);i++){
+      const f=w.factors[i];
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:4px">';
+      h+='<span style="color:var(--text-2)">'+escHtml(f.name)+'</span>';
+      h+='<div style="display:flex;align-items:center;gap:6px">';
+      h+='<span style="color:var(--text-1);font-size:10px">'+escHtml(f.value)+'</span>';
+      h+='<div style="width:40px;height:3px;background:rgba(255,255,255,.1);border-radius:2px"><div style="width:'+Math.min(100,f.weight*3)+'%;height:100%;background:var(--green);border-radius:2px"></div></div>';
+      h+='</div></div>';
+    }
+    h+='</div>';
+  }
+
+  // 处置建议
+  h+='<div style="background:'+LBG[p.level]+';border-radius:6px;padding:10px;border-left:3px solid '+wc+'">';
+  h+='<div style="font-size:11px;color:'+wc+';font-weight:600;margin-bottom:4px">⚡ 处置建议</div>';
+  h+='<div style="font-size:11px;color:var(--text-1);line-height:1.6">'+escHtml(w.action)+'</div>';
+  h+='</div>';
+
+  panel.innerHTML=h;
+
+  // 地图聚焦
+  if(_mapMode==='echarts'&&_routeMapChart&&w.routeData&&w.routeData[0]){
+    const r=w.routeData[0];
+    if(r.originCoord&&r.destCoord){
+      const midLng=(r.originCoord[0]+r.destCoord[0])/2;
+      const midLat=(r.originCoord[1]+r.destCoord[1])/2;
+      _routeMapChart.setOption({geo:{center:[midLng, midLat], zoom:2.5}});
+    }
+  }
+}
+
+function closeRouteDetail(){
+  const card=document.getElementById('routeDetailCard');
+  if(card)card.style.display='none';
+  _selectedPerson=null;
+  if(_mapMode==='echarts'&&_routeMapChart){
+    _routeMapChart.setOption({geo:{center:[105, 36], zoom:1.2}});
+  }
+}
+
+function getLevelCounts(){const c={"红色":0,"橙色":0,"黄色":0,"蓝色":0};persons.forEach(p=>c[p.level]++);return c;}
+function getWarnCounts(){const w={"红色预警":0,"橙色预警":0,"黄色预警":0,"蓝色预警":0};persons.forEach(p=>{if(p.warn.level!=='无预警')w[p.warn.level]++;});return w;}
+
+function renderPie(id,data){
+  if(typeof echarts==='undefined')return null;
+  const el=document.getElementById(id);if(!el)return null;const ch=echarts.init(el);
+  const items=Object.entries(data);
+  ch.setOption({
+    tooltip:{trigger:'item',formatter:'{b}: {c}人 ({d}%)',backgroundColor:'rgba(7,14,29,.9)',borderColor:'rgba(56,116,200,.3)',textStyle:{color:'#f0f4ff',fontSize:12}},
+    series:[{type:'pie',radius:['40%','65%'],center:['50%','50%'],
+      label:{color:'#8ea8d0',fontSize:11,formatter:'{b}\n{c}人'},
+      labelLine:{lineStyle:{color:'rgba(56,116,200,.3)'}},
+      itemStyle:{borderColor:'rgba(7,14,29,.8)',borderWidth:2},
+      data:items.map(([k,v])=>({value:v,name:k,itemStyle:{color:LC[k.replace('预警','')]||'#3874c8'}}))}]
+  });return ch;
+}
+
+function renderBar(id,data){
+  if(typeof echarts==='undefined')return null;
+  const el=document.getElementById(id);if(!el)return null;const ch=echarts.init(el);
+  const items=Object.entries(data);
+  ch.setOption({
+    tooltip:{trigger:'axis',backgroundColor:'rgba(7,14,29,.9)',borderColor:'rgba(56,116,200,.3)',textStyle:{color:'#f0f4ff',fontSize:12}},
+    grid:{left:'8%',right:'8%',top:'15%',bottom:'15%'},
+    xAxis:{type:'category',data:items.map(([k])=>k),axisLine:{lineStyle:{color:'rgba(56,116,200,.2)'}},axisLabel:{color:'#8ea8d0',fontSize:12}},
+    yAxis:{type:'value',axisLine:{show:false},splitLine:{lineStyle:{color:'rgba(56,116,200,.08)'}},axisLabel:{color:'#50668a',fontSize:11}},
+    series:[{type:'bar',data:items.map(([k,v])=>({value:v,itemStyle:{color:LC[k]}})),barWidth:'40%',
+      itemStyle:{borderRadius:[4,4,0,0]},label:{show:true,position:'top',color:'#8ea8d0',fontSize:12,formatter:'{c}人'}}]
+  });return ch;
+}
+
+function renderRadar(el,p){
+  if(typeof echarts==='undefined')return null;
+  const ch=echarts.init(el);
+  ch.setOption({
+    tooltip:{backgroundColor:'rgba(7,14,29,.9)',borderColor:'rgba(56,116,200,.3)',textStyle:{color:'#f0f4ff',fontSize:11}},
+    radar:{indicator:p.radar.map(d=>({name:d.name,max:100})),
+      shape:'polygon',splitNumber:4,
+      axisName:{color:'#8ea8d0',fontSize:11},
+      splitLine:{lineStyle:{color:'rgba(56,116,200,.1)'}},
+      splitArea:{areaStyle:{color:['rgba(56,116,200,.02)','rgba(56,116,200,.04)']}},
+      axisLine:{lineStyle:{color:'rgba(56,116,200,.15)'}},
+      center:['50%','52%'],radius:'68%'},
+    series:[{type:'radar',data:[{value:p.radar.map(d=>d.value),
+      areaStyle:{color:'rgba(56,116,200,.15)'},
+      lineStyle:{color:'#5a9bf0',width:2},
+      itemStyle:{color:'#5a9bf0'}}]}]
+  });return ch;
+}
+
+function renderGauge(el,score,level){
+  if(typeof echarts==='undefined')return null;
+  const ch=echarts.init(el);
+  ch.setOption({
+    series:[{type:'gauge',radius:'90%',center:['50%','55%'],
+      min:0,max:100,startAngle:200,endAngle:-20,
+      progress:{show:true,width:8,itemStyle:{color:LC[level]}},
+      axisLine:{lineStyle:{width:8,color:[[1,'rgba(56,116,200,.08)']]}},
+      axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},
+      pointer:{show:false},
+      detail:{valueAnimation:true,fontSize:28,fontWeight:700,color:LC[level],offsetCenter:[0,'0%'],formatter:'{value}'},
+      title:{show:true,offsetCenter:[0,'35%'],color:'#8ea8d0',fontSize:12},
+      data:[{value:score,name:level+'级'}]}]
+  });return ch;
+}
+
+// Module 1
+function renderCollect(){
+  if(!persons||!persons.length){
+    const el=document.getElementById('collectStats');if(el)el.innerHTML='<div class="empty">暂无数据</div>';
+    const fel=document.getElementById('fileListPanel');if(fel)fel.innerHTML='<div class="empty">请先上传数据文件</div>';
+    const fcel=document.getElementById('fileCount');if(fcel)fcel.textContent='0个文件';
+    const sel=document.getElementById('srcPanel');if(sel)sel.innerHTML='<div class="empty">暂无数据</div>';
+    return;
+  }
+  const totalRows=persons.reduce((s,p)=>s+(p.rows?p.rows.length:0),0);
+  const bjTrain=persons.reduce((s,p)=>s+(p.bjT||p.warn?.bjT||0),0);
+  const bjFlight=persons.reduce((s,p)=>s+(p.bjF||0),0);
+  const petCount=persons.reduce((s,p)=>s+(p.petitionCount||0),0);
+  const crimeCount=persons.reduce((s,p)=>s+(p.crimeCount||0),0);
+  const srcs=persons.flatMap(p=>p.srcs||[]);
+  const stats=[
+    ['解析文件',files?files.length:0],
+    ['数据行数',totalRows],
+    ['识别人员',persons.length],
+    ['信访记录',petCount],
+    ['犯罪记录',crimeCount],
+    ['进京火车',bjTrain],
+    ['进京航班',bjFlight],
+    ['数据源数',new Set(srcs).size]
+  ];
+  const csEl=document.getElementById('collectStats');
+  if(csEl)csEl.innerHTML=stats.map(([l,v])=>`<div class="stat"><span class="lbl">${l}</span><span class="val">${v}</span></div>`).join('');
+
+  const sm={};
+  persons.forEach(p=>{
+    const pSrcs=p.srcs||[];
+    const pFiles=p.fNames||[];
+    pSrcs.forEach(s=>{
+      if(!sm[s])sm[s]={count:0,files:new Set()};
+      sm[s].count++;
+      pFiles.forEach(f=>sm[s].files.add(f));
+    });
+  });
+  const srcEl=document.getElementById('srcPanel');
+  if(srcEl)srcEl.innerHTML=Object.entries(sm).map(([s,d])=>`<div class="src"><div class="src-name"><span style="width:6px;height:6px;border-radius:50%;background:var(--blue-l);display:inline-block"></span>${s}</div><div class="src-info">关联人员：${d.count}人 · 涉及文件：${d.files.size}个</div></div>`).join('')||'<div class="empty">无数据</div>';
+
+  const fcEl=document.getElementById('fileCount');
+  if(fcEl)fcEl.textContent=`${files?files.length:0}个文件`;
+  const flEl=document.getElementById('fileListPanel');
+  if(flEl&&files)flEl.innerHTML=files.map(f=>`<div class="src"><div class="src-name">&#128196; ${f.name}</div><div class="src-info">文件大小：${(f.size/1024).toFixed(1)} KB · 类型：${f.name.split('.').pop().toUpperCase()}</div></div>`).join('');
+}
+
+// Module 2
+function renderPortraitStats(){
+  const c=getLevelCounts();let wg=0,jj=0,ts=0;persons.forEach(p=>{if(p.tags["违规上访"])wg++;if(p.tags["进京上访"])jj++;ts+=p.score;});
+  const stats=[['总人数',persons.length,''],['红色',c['红色'],'r'],['橙色',c['橙色'],'o'],['黄色',c['黄色'],'y'],['蓝色',c['蓝色'],'g'],['违规上访',wg,'r'],['进京上访',jj,'o'],['平均得分',persons.length?Math.round(ts/persons.length*10)/10:0,'']];
+  document.getElementById('portraitStats').innerHTML=stats.map(([l,v,c])=>`<div class="stat ${c||''}"><span class="lbl">${l}</span><span class="val">${v}</span></div>`).join('');
+}
+
+function renderPersonGrid(){
+  const s=(document.getElementById('searchInput')?.value||'').toLowerCase();const f=document.getElementById('levelFilter')?.value||'';
+  let fl=persons.filter(p=>{if(f&&p.level!==f)return false;if(s){const t=(p.name+p.idCard+p.address).toLowerCase();if(!t.includes(s))return false;}return true;});
+  document.getElementById('personCount2').textContent=`${fl.length}人`;
+  let h='';if(!fl.length){h='<div class="empty">无匹配人员</div>';}else{for(const p of fl){
+    const c=LC[p.level];const ht=Object.entries(p.tags).filter(([t,v])=>v).map(([t])=>t).slice(0,3);
+    const dotCls=p.level==='红色'?'bg-r':p.level==='橙色'?'bg-o':p.level==='黄色'?'bg-y':'bg-g';
+    const tagHtml=ht.map(t=>`<span class="tag-mini ${p.level==='红色'?'bg-r-soft':p.level==='橙色'?'bg-o-soft':p.level==='黄色'?'bg-y-soft':'bg-g-soft'}">${escHtml(t)}</span>`).join('');
+    const safeId=escHtml(p.idCard||p.name);
+    h+=`<div class="person" onclick="showDetail('${safeId.replace(/'/g,"\\'")}')">
+      <div class="dot ${dotCls}" style="color:${c}"></div>
+      <div class="info">
+        <div class="name">${escHtml(p.name||'未知')}</div>
+        <div class="meta">${p.idCard?escHtml(p.idCard.substring(0,6))+'******':'无身份证'} · ${p.address?escHtml(p.address.substring(0,12))+'...':'无住址'}</div>
+        <div class="tags-mini">${tagHtml}</div>
+      </div>
+      <div class="score-box">
+        <div class="score-num" style="color:${c}">${p.score}</div>
+        <div class="score-lvl" style="color:${c}">${escHtml(p.level)}</div>
+      </div>
+    </div>`;
+  }}document.getElementById('personGrid').innerHTML=h;
+}
+
+function renderTagHits(){
+  const hits={};for(const[t]of Object.entries(W))hits[t]=persons.filter(p=>p.tags[t]).length;
+  const sorted=Object.entries(hits).sort((a,b)=>b[1]-a[1]);
+  const maxW=Math.max(...Object.values(W));
+  let h='<table class="wt-table"><tr><th>标签</th><th style="text-align:right">权重</th><th style="text-align:center">命中</th></tr>';
+  for(const[t,c]of sorted){
+    const w=W[t];const barW=Math.round(w/maxW*40);
+    h+=`<tr><td><span class="wt-bar" style="width:${barW}px"></span>${t}</td><td style="text-align:right;color:var(--blue-l);font-weight:600">${w}</td><td class="hit" style="text-align:center">${c>0?c:'—'}</td></tr>`;
+  }
+  h+='</table>';document.getElementById('tagHitPanel').innerHTML=h;
+}
+
+// Module 3
+function renderWeights(){
+  const sorted=Object.entries(W).sort((a,b)=>b[1]-a[1]);
+  const maxW=Math.max(...sorted.map(s=>s[1]));
+  let h='<table class="wt-table"><tr><th>标签</th><th style="text-align:right">权重</th><th style="text-align:center">命中</th></tr>';
+  for(const[t,w]of sorted){const c=persons.filter(p=>p.tags[t]).length;const barW=Math.round(w/maxW*40);
+  h+=`<tr><td><span class="wt-bar" style="width:${barW}px"></span>${t}</td><td style="text-align:right;color:var(--blue-l);font-weight:600">${w}</td><td class="hit" style="text-align:center">${c>0?c:'—'}</td></tr>`;}
+  h+='</table>';
+  h+='<div class="rule-box"><div class="rt">评分规则</div>';
+  h+='违规上访(50) + 进京上访(45) = 95分 &#8594; 红色<br>进京上访(45) 单独 = 45分 &#8594; 橙色<br>到省厅上访(25) 单独 = 25分 &#8594; 黄色<br>到市局上访(12) 单独 = 12分 &#8594; 蓝色<br>';
+  h+='另有动态加分：进京次数+3/次、信访次数+2/次、犯罪次数+2/次<br>';
+  h+='<span style="color:var(--red)">红 &#8805;80</span> | <span style="color:var(--orange)">橙 &#8805;40</span> | <span style="color:var(--yellow)">黄 &#8805;20</span> | <span style="color:var(--green)">蓝 &lt;20</span></div>';
+  document.getElementById('weightPanel').innerHTML=h;
+}
+
+function renderControl(){
+  const info={"红色":{c:'#ff4d4f',m:'立即稳控，启动应急预案',cond:'违规上访+进京上访组合'},"橙色":{c:'#ff8c42',m:'重点跟踪，每日走访',cond:'进京上访或违规上访单独'},"黄色":{c:'#ffcc44',m:'定期走访，每周联系',cond:'到省厅上访或犯罪记录+其他'},"蓝色":{c:'#36c667',m:'常规关注，每月排查',cond:'到市局上访或无明显风险'}};
+  const cnt=getLevelCounts();let h='';
+  for(const[lvl,d]of Object.entries(info)){
+    const pct=persons.length?Math.round(cnt[lvl]/persons.length*100):0;
+    h+=`<div class="wcard" style="border-left-color:${d.c}">
+      <div class="whead">
+        <span class="badge" style="background:${d.c}">${lvl}</span>
+        <span style="color:${d.c};font-size:18px;font-weight:700">${cnt[lvl]}人</span>
+      </div>
+      <div class="winfo">触发条件：${d.cond}<br>管控措施：${d.m}<br>占比：${pct}%</div>
+      <div class="pbar"><div class="pbar-fill" style="width:${pct}%;background:${d.c}"></div></div>
+    </div>`;
+  }
+  document.getElementById('controlPanel').innerHTML=h;
+}
+
+// Module 4
+function renderWarnings(){
+  const w=getWarnCounts();
+  const wsEl=document.getElementById('warningStats');
+  if(wsEl){
+    wsEl.innerHTML='<div class="stat r"><span class="lbl">红色预警</span><span class="val">'+(w['红色预警']||0)+'</span></div>'+
+      '<div class="stat o"><span class="lbl">橙色预警</span><span class="val">'+(w['橙色预警']||0)+'</span></div>'+
+      '<div class="stat y"><span class="lbl">黄色预警</span><span class="val">'+(w['黄色预警']||0)+'</span></div>'+
+      '<div class="stat g"><span class="lbl">蓝色预警</span><span class="val">'+(w['蓝色预警']||0)+'</span></div>';
+  }
+  const warned=persons.filter(p=>p.warn.level!=='无预警');
+  const wcEl=document.getElementById('warnCount');
+  if(wcEl)wcEl.textContent=warned.length+'人';
+  const order={'红色预警':0,'橙色预警':1,'黄色预警':2,'蓝色预警':3};
+  warned.sort((a,b)=>(order[a.warn.level]||9)-(order[b.warn.level]||9));
+  let h='';
+  if(!warned.length){h='<div class="empty">暂无预警人员</div>';}
+  else{
+    for(let i=0;i<Math.min(warned.length,50);i++){
+      const p=warned[i];
+      const w_=p.warn;
+      const c=w_.level.includes('红色')?'#ff4d4f':w_.level.includes('橙色')?'#ff8c42':w_.level.includes('黄色')?'#ffcc44':'#36c667';
+      const pname=p.name.replace(/'/g,"\\'");
+      h+='<div class="wcard" style="border-left-color:'+c+';cursor:pointer" onclick="showRouteDetailByPerson(\''+pname+'\')">';
+      h+='<div class="whead"><span class="wname">'+escHtml(p.name)+'</span><span class="badge" style="background:'+c+'">'+w_.level+'</span></div>';
+      h+='<div class="winfo">预测目的地：'+escHtml(w_.dest)+'（'+w_.dp+'%）<br>7天概率：'+w_.p7+'% · 30天概率：'+w_.p30+'%<br>处置：'+escHtml(w_.action)+'</div>';
+      if(w_.dp>0){h+='<div class="pbar"><div class="pbar-fill" style="width:'+w_.dp+'%;background:'+c+'"></div></div>';}
+      h+='</div>';
+    }
+  }
+  const wlEl=document.getElementById('warningListPanel');
+  if(wlEl)wlEl.innerHTML=h;
+  renderPredStats();
+}
+function renderAnomalies(){
+  const el=document.getElementById('anomalyPanel');
+  if(!el)return;
+  const anom=persons.filter(p=>p.warn&&(p.warn.bjT>=3||p.warn.level.includes('红色')||p.warn.level.includes('橙色')));
+  let h='';
+  if(!anom.length){h='<div class="empty">暂无异常</div>';}
+  else{
+    for(const p of anom.slice(0,30)){
+      const bjT=p.warn? (p.warn.bjT||0):0;
+      let items=[];
+      if(bjT>=3)items.push('高频进京');
+      if(p.tags&&p.tags["违规上访"])items.push('违规上访');
+      if(p.tags&&p.tags["进京上访"])items.push('进京上访');
+      if(p.tags&&p.tags["有犯罪记录"])items.push('有犯罪记录');
+      const warnLevel=p.warn?p.warn.level:'';
+      const c=warnLevel.includes('红色')?'#ff4d4f':warnLevel.includes('橙色')?'#ff8c42':'#ffcc44';
+      h+=`<div class="wcard" style="border-left-color:${c}">
+        <div class="whead"><span class="wname">${p.name||''}</span><span style="color:${c};font-weight:700">${p.score||0}分</span></div>
+        <div class="winfo">${items.join(' · ')}<br>进京${bjT}次 · ${p.level||''}级</div>
+      </div>`;
+    }
+  }
+  el.innerHTML=h;
+}
+
+// Module 5
+function renderUpdateForm(){
+  document.getElementById('updPerson').innerHTML='<option value="">-- 选择人员 --</option>'+persons.map(p=>`<option value="${escHtml(p.idCard||p.name)}">${escHtml(p.name)} - ${p.score}分 - ${escHtml(p.level)}</option>`).join('');
+  renderUpdateLog();
+}
+
+function submitUpdate(){
+  const id=document.getElementById('updPerson').value;const type=document.getElementById('updType').value;const content=document.getElementById('updContent').value;
+  if(!id){alert('请选择人员');return;}
+  const p=persons.find(p=>(p.idCard||p.name)===id);if(!p)return;let adj=0;
+  if(type==='化解成功'){p.tags['未化解']=false;adj=-8;}
+  else if(type==='稳控到位'){adj=-Math.round(p.score*0.3);}
+  else if(type==='新增信访'){p.petitionCount++;adj=2;if(p.petitionCount>5)p.tags['高发信访_大于5次']=true;}
+  else if(type==='新增犯罪'){p.crimeCount++;p.tags['有犯罪记录']=true;adj=15;}
+  else if(type==='新增进京'){p.bjT++;p.tags['进京上访']=true;p.tags['进京火车记录']=true;adj=45;}
+  else if(type==='新增投诉'){p.complaintCount++;adj=2;}
+  const sc=calcScore(p.tags,p);p.score=sc.score;p.detail=sc.detail;p.level=classify(sc.score);p.warn=genWarn(p);p.radar=getRadar(p);
+  logs.unshift({time:new Date().toLocaleString('zh-CN'),person:p.name,type,content,adjust:adj,score:p.score,level:p.level});
+  persons.sort((a,b)=>b.score-a.score);renderAll();
+  document.getElementById('updContent').value='';
+  alert(`更新成功：${p.name} ${type}，得分${adj>0?'+':''}${adj}，当前 ${p.score}分 / ${p.level}`);
+}
+
+function renderUpdateLog(){
+  document.getElementById('logCount').textContent=`${logs.length}条`;
+  let h='';if(!logs.length){h='<div class="empty">暂无更新记录</div>';}else{for(const l of logs){
+    h+=`<div class="log-item"><span style="color:var(--blue-l)">${l.time}</span> · ${l.person}<br><strong>${l.type}</strong>：${l.content||'无描述'}<br>得分调整 <span style="color:${l.adjust>0?'var(--red)':'var(--green)'}">${l.adjust>0?'+':''}${l.adjust}</span> &#8594; <strong>${l.score}分 / ${l.level}</strong></div>`;
+  }}document.getElementById('updateLogPanel').innerHTML=h;
+}
+
+// Detail popup
+function showDetail(idKey){
+  const p=persons.find(p=>p.idCard===idKey||p.name===idKey);if(!p)return;
+  const ht=Object.entries(p.tags).filter(([t,v])=>v).map(([t])=>({tag:t,weight:W[t]||0}));ht.sort((a,b)=>b.weight-a.weight);
+  let h=`<h2 style="color:${LC[p.level]}">${escHtml(p.name)}</h2>`;
+  h+=`<div class="sub">${escHtml(p.level)}级 · ${p.score}分 · ${escHtml(p.idCard||'无身份证')} · ${escHtml(p.address||'住址未知')}</div>`;
+  h+=`<div class="detail-grid"><div style="display:flex;flex-direction:column;gap:16px">`;
+  h+=`<div style="height:240px" id="detailRadar"></div>`;
+  h+=`<div style="height:140px" id="detailGauge"></div>`;
+  h+=`</div><div>`;
+  h+='<div class="dim"><div class="dim-t">基础信息</div>';
+  h+=`<div class="dim-r"><span>性别</span><span>${escHtml(p.gender||'未知')}</span></div>`;
+  h+=`<div class="dim-r"><span>学历</span><span>${escHtml(p.education||'未知')}</span></div>`;
+  h+=`<div class="dim-r"><span>年龄段</span><span>${escHtml(p.ageGroup||'未知')}</span></div>`;
+  h+=`<div class="dim-r"><span>职业</span><span>${escHtml(p.occ||'未知')}</span></div>`;
+  h+=`<div class="dim-r"><span>婚姻状况</span><span>${escHtml(p.mStatus||'未知')}</span></div>`;
+  h+=`<div class="dim-r"><span>保障状态</span><span>${escHtml(p.gStatus||'未知')}</span></div></div>`;
+  h+='<div class="dim"><div class="dim-t">命中标签（按权重排序）</div><div class="tags">';
+  for(const t of ht){const c=t.weight>=30?'#ff4d4f':t.weight>=15?'#ff8c42':t.weight>=8?'#ffcc44':'#36c667';h+=`<span class="tag" style="background:${c}22;color:${c};border:1px solid ${c}55">${escHtml(t.tag)} +${t.weight}</span>`;}
+  h+='</div></div>';
+  h+='<div class="dim"><div class="dim-t">行为数据</div>';
+  h+=`<div class="dim-r"><span>信访次数</span><span>${p.petitionCount}</span></div>`;
+  h+=`<div class="dim-r"><span>历史案件总数</span><span>${p.totalCases||0}件</span></div>`;
+  h+=`<div class="dim-r"><span>数据来源数</span><span>${p.srcs?p.srcs.length:0}个</span></div>`;
+  if(p.firstYear)h+=`<div class="dim-r"><span>首次信访年份</span><span>${p.firstYear}年</span></div>`;
+  if(p.petitionYears>0)h+=`<div class="dim-r"><span>信访年限</span><span>${p.petitionYears}年（年均${p.avgPerYear}次）</span></div>`;
+  h+=`<div class="dim-r"><span>犯罪次数</span><span>${p.crimeCount}</span></div>`;
+  h+=`<div class="dim-r"><span>进京火车</span><span>${p.bjT}</span></div>`;
+  h+=`<div class="dim-r"><span>进京航班</span><span>${p.bjF}</span></div>`;
+  h+=`<div class="dim-r"><span>信访去向</span><span>${escHtml(p.pDest||'无')}</span></div>`;
+  if(p.pContent)h+=`<div class="dim-r"><span>信访内容</span><span style="max-width:280px">${escHtml(p.pContent.substring(0,150))}${p.pContent.length>150?'...':''}</span></div>`;
+  h+='</div>';
+  const w=p.warn;const wc=w.level.includes('红色')?'#ff4d4f':w.level.includes('橙色')?'#ff8c42':w.level.includes('黄色')?'#ffcc44':'#36c667';
+  h+='<div class="dim"><div class="dim-t">行程预警</div>';
+  h+=`<div class="dim-r"><span>预警等级</span><span style="color:${wc};font-weight:600">${escHtml(w.level)}</span></div>`;
+  h+=`<div class="dim-r"><span>最高概率目的地</span><span>${escHtml(w.dest)}（${w.dp}%）</span></div>`;
+  // 多目的地概率
+  if(w.routeList&&w.routeList.length>1){
+    h+='<div style="margin:8px 0 4px;font-size:11px;color:var(--text-2)">多目的地概率：</div>';
+    w.routeList.forEach((rd,ri)=>{
+      const rc=ri===0?'#ff4d4f':ri===1?'#ff8c42':ri===2?'#ffcc44':'#36c667';
+      h+=`<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px">
+        <span style="flex:1;color:var(--text-1)">${escHtml(rd[0])}</span>
+        <div style="flex:2;height:6px;background:rgba(56,116,200,.1);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${rd[1]}%;background:${rc};border-radius:3px"></div>
+        </div>
+        <span style="color:${rc};font-weight:600;width:36px;text-align:right">${rd[1]}%</span>
+      </div>`;
+    });
+  }
+  h+=`<div class="dim-r"><span>未来7天概率</span><span style="color:${w.p7>50?'#ff4d4f':w.p7>20?'#ff8c42':'#ffcc44'};font-weight:600">${w.p7}%</span></div>`;
+  h+=`<div class="dim-r"><span>未来30天概率</span><span style="color:${w.p30>70?'#ff4d4f':w.p30>40?'#ff8c42':'#ffcc44'};font-weight:600">${w.p30}%</span></div>`;
+  h+=`<div class="dim-r"><span>处置建议</span><span>${escHtml(w.action)}</span></div></div>`;
+  h+='<div class="dim"><div class="dim-t">赋分明细</div>';
+  for(const d of p.detail)h+=`<div class="dim-r"><span>${escHtml(d.tag)}</span><span style="color:var(--blue-l)">+${d.weight}</span></div>`;
+  h+=`<div class="dim-r" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px"><span style="font-weight:600;color:#fff">合计</span><span style="color:${LC[p.level]};font-weight:700;font-size:16px">${p.score}分</span></div></div>`;
+  h+='</div></div>';
+  document.getElementById('detailContent').innerHTML=h;document.getElementById('detailOverlay').style.display='flex';
+  setTimeout(()=>{
+    const re=document.getElementById('detailRadar');if(re)renderRadar(re,p);
+    const ge=document.getElementById('detailGauge');if(ge)renderGauge(ge,p.score,p.level);
+  },50);
+}
+
+function closeDetail(){document.getElementById('detailOverlay').style.display='none';}
+function resetData(){persons=[];files=[];logs=[];document.getElementById('uploadZone').style.display='block';document.getElementById('tabs').style.display='none';document.querySelectorAll('.module').forEach(m=>m.classList.remove('active'));document.getElementById('fileList').innerHTML='';document.getElementById('fileInput').value='';document.getElementById('personCount').textContent='未上传数据';}
+
+const uz=document.getElementById('uploadZone');
+uz.addEventListener('dragover',e=>{e.preventDefault();uz.classList.add('dragover');});
+uz.addEventListener('dragleave',()=>uz.classList.remove('dragover'));
+uz.addEventListener('drop',e=>{e.preventDefault();uz.classList.remove('dragover');
+  const fl=[];const exts=['.xlsx','.xls','.csv','.db','.sqlite','.sqlite3'];
+  for(const f of e.dataTransfer.files){const n=f.name.toLowerCase();if(exts.some(x=>n.endsWith(x)))fl.push(f);}
+  if(fl.length)handleFiles(fl);
+});
+window.addEventListener('resize',()=>{Object.values(chartInstances).forEach(c=>c&&c.resize&&c.resize());if(_routeMapChart){try{_routeMapChart.resize();}catch(e){}}});
+</script>
+</body>
+</html>
